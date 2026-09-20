@@ -98,11 +98,12 @@ function doApply(){
   fetch('/mdagent/v1/apply', {method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({username: u, password: p, provider: pr,
-                            api_key: k, contact: c, reason: r})}
+                            api_key: k, contact: c, reason: r})})
   .then(function(r){ return r.json().then(function(j){ return {code: r.status, j: j}; }); })
   .then(function(r){
     if (r.code === 200) {
-      show('ok', '已提交(' + (r.j.msg || '') + ')。等管理员批准后,装好客户端用账号密码登录即可。');
+      show('ok', '✅ 提交成功!' + (r.j.msg || '') + ' 等管理员批准后,装好客户端用账号密码登录即可。');
+      b.textContent = '已提交,等管理员批准';
     } else {
       show('err', '提交失败:' + (r.j.detail || ('HTTP ' + r.code)));
       b.disabled = false; b.textContent = '重新提交';

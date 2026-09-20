@@ -1003,6 +1003,7 @@ _COMMANDS = [
     ("/auto", "", "写操作免确认开关(默认关,逐笔批准)"),
     ("/goal", "", "目标面板:当前任务子目标展开"),
     ("/apikey", "", "换大模型 API Key(自动打开 Kimi 网页登录复制)"),
+    ("/login", "", "账号密码登录(token 自动获取,免粘贴)"),
     ("/mouse", "", "鼠标捕获开关(关=直接框选复制,滚轮点击失效)"),
     ("/status", "", "桥连接状态 + 每小时用量"),
     ("/help", "", "全部命令"),
@@ -1216,6 +1217,7 @@ class MdAgentApp(App):
         self._spin_i = 0
         self.confirm = None          # "auto_on" 等输入框确认流程
         self.keywiz = None           # /apikey 两步向导:{"step","provider"}
+        self.login = None            # /login 两步:{"step","user"}
         self.approval = None         # (oid, req)
         self.stream_card = None
         self._goal_mtime = None
@@ -1379,6 +1381,9 @@ class MdAgentApp(App):
         if self.confirm:
             self._resolve_confirm(text)
             return
+        if self.login:
+            self._login_step(text)
+            return
         if self.keywiz:
             self._keywiz_step(text)
             return
@@ -1529,6 +1534,12 @@ class MdAgentApp(App):
                 self.confirm = "auto_on"
                 self.add_sys("开启后写文件不再逐笔询问(仍限开放目录内)。"
                              "确认请在输入框输入 yes,其它取消")
+        elif cmd == "login":
+            self.login = {"step": "user"}
+            inp = self.query_one("#composer", Input)
+            inp.password = False
+            inp.placeholder = "用户名(直接回车取消 /login)"
+            self.add_sys("登录:输入用户名(直接回车取消)")
         elif cmd == "apikey":
             url = "https://platform.moonshot.cn/console/api-keys"
             self.add_sys("换大模型 API Key:正在浏览器打开 Kimi 控制台,"
@@ -1626,6 +1637,50 @@ class MdAgentApp(App):
             STATE["auto"] = text.strip().lower() == "yes"
             self.add_sys("写操作免确认: %s"
                          % ("开(谨慎!)" if STATE["auto"] else "关"))
+
+    # ---- /login 两步登录 ----
+    def _login_step(self, text):
+        st = self.login
+        inp = self.query_one("#composer", Input)
+        if st["step"] == "user":
+            if not text.strip():
+                self._login_cancel()
+                return
+            st["user"] = text.strip()
+            st["step"] = "pwd"
+            inp.password = True
+            inp.placeholder = "密码(不回显),回车登录"
+            self.add_sys("密码(输入不回显),回车登录;直接回车取消")
+            return
+        self.login = None
+        inp.password = False
+        inp.placeholder = "输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标"
+        if not text:
+            self.add_sys("已取消")
+            return
+        asyncio.get_event_loop().create_task(self._login_do(st["user"], text))
+
+    def _login_cancel(self):
+        self.login = None
+        inp = self.query_one("#composer", Input)
+        inp.password = False
+        inp.placeholder = "输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标"
+        self.add_sys("已取消 /login")
+
+    async def _login_do(self, user, pwd):
+        loop = asyncio.get_event_loop()
+        server = (STATE["cfg"] or {}).get("server") or DEFAULT_SERVER
+        self.add_sys("登录中(输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标 @ 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标)…" % (user, server))
+        try:
+            d = await loop.run_in_executor(None, functools.partial(
+                _login, server, user, pwd))
+        except Exception as e:
+            self.add_sys("登录失败: 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标" % e)
+            return
+        root = str(STATE["jail"].root) if STATE["jail"] else os.getcwd()
+        STATE["cfg"] = _save_cfg(server, d["token"], root)
+        self.add_sys("登录成功: 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标(token 已存本机,旧 token 作废)"
+                     % d.get("username", user))
 
     # ---- /apikey 两步向导 ----
     def _keywiz_step(self, text):

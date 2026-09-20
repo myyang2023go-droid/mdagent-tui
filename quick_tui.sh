@@ -16,11 +16,13 @@ cd "$D"
 echo "[1/3] 下载 $REPO ..."
 curl -fsSL -o tui.tar.gz "$REPO/archive/refs/heads/main.tar.gz"
 tar xzf tui.tar.gz && cd mdagent-tui-main
-echo "[2/3] 安装依赖 textual ..."
+echo "[2/4] 安装依赖 textual ..."
 python3 -m pip install --user textual \
   || python3 -m pip install --user --break-system-packages textual \
   || python3 -m pip install textual
-echo "[3/3] 启动 TUI(首跑向导: 服务器回车 -> 选 2 贴 token -> 选开放目录)"
+echo "[3/4] 安装 mdagent 命令(以后任何目录输 mdagent 即启动)..."
+sh install.sh
+echo "[4/4] 启动 TUI(首跑向导: 服务器回车 -> 选 1 账号密码登录 -> 选开放目录)"
 # curl|sh 管道跑时 stdin 被管道占用,input() 会立即 EOF——还给终端
 if [ -c /dev/tty ]; then exec < /dev/tty; fi
 python3 client/mdagent_tui.py "$@"

@@ -77,6 +77,9 @@
   </table>
 </div>
 
+<div class="note" style="margin:16px 0">装好以后,日常启动就是一条命令:<code>mdagent</code>
+(Windows 新开终端同样输 <code>mdagent</code>)——不用再进目录跑脚本。</div>
+
 <h2><span class="n">2</span>首跑向导(共答三下)</h2>
 <div class="card">
 <table class="steps">
@@ -99,8 +102,9 @@
   <p>提交后状态为 <code>pending</code>,等管理员批准,然后就能在向导里选 <code>1</code> 用账号密码登录。</p>
   <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
   <p style="margin-bottom:0"><b>方式二:管理员直接发 token</b></p>
-  <p style="margin-bottom:0">管理员发给你一串 <code>mda_…</code> 开头的令牌 → 向导里选 <code>2</code> 贴进去即可。
-     之后可在 TUI 里输入 <code>/apikey</code> 换成自己的大模型 key、<code>/passwd</code> 设自己的密码。</p>
+  <p style="margin-bottom:0">管理员发给你一串 <code>mda_…</code> 开头的令牌 → 向导里选 <code>2</code> 贴进去即可
+     (贴错会当场报错,不会存)。之后在 TUI 里输 <code>/login</code> 用账号密码登录更方便,
+     <code>/apikey</code> 可换成自己的大模型 key。</p>
 </div>
 
 <h2><span class="n">4</span>安全须知(为什么放心用)</h2>
@@ -120,6 +124,7 @@
 <div class="card">
 <table>
   <tr><th>命令</th><th>作用</th></tr>
+  <tr><td><code>/login</code></td><td><b>账号密码登录</b>(token 自动取回、密码不回显;换号/重登都用它)</td></tr>
   <tr><td><code>/project 名字</code></td><td>切会话项目(上下文独立,自动回放云端历史)</td></tr>
   <tr><td><code>/root 目录</code></td><td>换开放给智能体的本地目录</td></tr>
   <tr><td><code>/auto</code></td><td>写操作免确认开关(默认关)</td></tr>

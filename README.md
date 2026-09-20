@@ -37,6 +37,17 @@ curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main
 推荐向导里选 `1` 直接账号密码登录(token 自动获取,不用粘贴)。
 之后随时 `/login` 重新登录或换账号。
 
+## 日常运行:输 mdagent
+
+装好之后不再需要进目录跑脚本——任何位置、任何时候:
+
+```
+mdagent
+```
+
+Windows 同样新开终端输 `mdagent`。若提示找不到命令,Linux/macOS 重开终端
+(或 `export PATH="$HOME/.local/bin:$PATH"`)。
+
 没有账号?在云端首页提交注册申请(自带大模型 API key),获批后即可登录。
 
 ## 安全模型

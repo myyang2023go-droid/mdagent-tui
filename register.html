@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mdagent · 注册申请</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161b27; --line:#232a3b; --card:#1a2030;
+    --txt:#c9d1e0; --dim:#5f6b7a; --blue:#5686fe; --amber:#d29922;
+    --green:#3fb950; --red:#f85149; --code:#12151d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.7 "PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  .wrap{max-width:560px;margin:0 auto;padding:36px 20px 60px}
+  .logo{font-size:26px;font-weight:700;color:#eaf0fb;letter-spacing:1px}
+  .logo .exp{color:var(--blue)}
+  .sub{color:var(--dim);margin:6px 0 24px;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+  label{display:block;margin:14px 0 4px;font-size:14px;color:#97a0b0}
+  label b{color:var(--txt)}
+  input,select,textarea{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);
+       background:var(--code);color:#e6eaf2;font:14px/1.5 inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+  textarea{resize:vertical;min-height:56px}
+  .hint{font-size:12px;color:var(--dim);margin-top:3px}
+  button{margin-top:22px;width:100%;padding:11px;border:none;border-radius:8px;
+       background:var(--blue);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  .msg{margin-top:14px;padding:10px 14px;border-radius:8px;font-size:14px;display:none}
+  .msg.ok{display:block;border-left:3px solid var(--green);background:rgba(63,185,80,.08)}
+  .msg.err{display:block;border-left:3px solid var(--red);background:rgba(248,81,73,.08)}
+  ol{color:var(--dim);font-size:13px;margin:18px 0 0;padding-left:20px}
+  a{color:var(--blue);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">MD<span class="exp">ᴱˣᵖ</span> 智能体<span style="font-size:15px;color:var(--dim)"> · 注册申请</span></div>
+  <div class="sub">填表提交申请,管理员批准后即可登录使用云端 MD 智能体。</div>
+
+  <div class="card">
+    <label><b>用户名</b> *
+      <div class="hint">3-16 位,小写字母开头,可用数字 _ -(注册后不可改)</div>
+    </label>
+    <input id="username" autocomplete="username" placeholder="zhangsan">
+
+    <label><b>密码</b> * <div class="hint">至少 8 位</div></label>
+    <input id="password" type="password" autocomplete="new-password" placeholder="设一个密码">
+
+    <label>大模型服务 * <div class="hint">对话消耗该 key 的额度;没有 key 可先随便填满 8 位,批准后找管理员换</div></label>
+    <select id="provider">
+      <option value="kimi-coding">Kimi(moonshot)</option>
+      <option value="bigmodel-anthropic">GLM(bigmodel)</option>
+      <option value="zai-coding-cn">Z.ai(zhipu)</option>
+    </select>
+
+    <label>API Key * <div class="hint">sk- 开头的大模型密钥</div></label>
+    <input id="api_key" type="password" autocomplete="off" placeholder="sk-…">
+
+    <label>联系方式 <div class="hint">选填,方便管理员联系你</div></label>
+    <input id="contact" placeholder="邮箱 / 微信(选填)">
+
+    <label>申请理由 <div class="hint">选填,一句话即可</div></label>
+    <textarea id="reason" placeholder="做什么用(选填)"></textarea>
+
+    <button id="submit" onclick="doApply()">提交申请</button>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <ol>
+    <li>提交后状态为「待审批」,管理员批准后会通知你</li>
+    <li>装客户端(Linux/macOS 一条命令):
+      <code style="color:var(--amber)">curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main/quick_tui.sh | sh</code></li>
+    <li>启动后向导选 1 账号密码登录(或 TUI 里输 <span style="color:var(--amber)">/login</span>)</li>
+  </ol>
+</div>
+<script>
+var RE = /^[a-z][a-z0-9_-]{2,15}$/;
+function doApply(){
+  var u = document.getElementById('username').value.trim(),
+      p = document.getElementById('password').value,
+      pr = document.getElementById('provider').value,
+      k = document.getElementById('api_key').value.trim(),
+      c = document.getElementById('contact').value.trim(),
+      r = document.getElementById('reason').value.trim(),
+      m = document.getElementById('msg'),
+      b = document.getElementById('submit');
+  m.className = 'msg';
+  if (!RE.test(u)) return show('err', '用户名须 3-16 位、小写字母开头,只能含数字 _ -');
+  if (p.length < 8) return show('err', '密码至少 8 位');
+  if (k.length < 8) return show('err', 'API Key 太短(没有可先填满 8 位的任意字符,批准后再换)');
+  b.disabled = true; b.textContent = '提交中…';
+  fetch('/mdagent/v1/apply', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: u, password: p, provider: pr,
+                            api_key: k, contact: c, reason: r})}
+  .then(function(r){ return r.json().then(function(j){ return {code: r.status, j: j}; }); })
+  .then(function(r){
+    if (r.code === 200) {
+      show('ok', '已提交(' + (r.j.msg || '') + ')。等管理员批准后,装好客户端用账号密码登录即可。');
+    } else {
+      show('err', '提交失败:' + (r.j.detail || ('HTTP ' + r.code)));
+      b.disabled = false; b.textContent = '重新提交';
+    }
+  })
+  .catch(function(e){
+    show('err', '网络错误:' + e + '(若证书警告未通过,先点「高级→继续访问\")');
+    b.disabled = false; b.textContent = '重新提交';
+  });
+}
+function show(cls, text){ var m = document.getElementById('msg');
+  m.className = 'msg ' + cls; m.textContent = text; }
+</script>
+</body>
+</html>

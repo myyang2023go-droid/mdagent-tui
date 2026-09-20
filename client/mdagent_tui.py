@@ -162,6 +162,35 @@ def _err_text(e):
 
 
 
+
+def _register_flow(server):
+    """终端内注册:收集字段 POST /v1/apply,提交后退出等审批(与网页注册页同接口)。"""
+    import getpass
+    print("  注册新账号(与网页注册页 %s/mdagent/register.html 等效):" % server.rstrip("/"))
+    username = input("  用户名(3-16位,小写字母开头): ").strip()
+    password = getpass.getpass("  密码(至少8位,不回显): ")
+    print("  大模型服务: 1) Kimi(moonshot)  2) GLM(bigmodel)  3) Z.ai(zhipu)")
+    pv = input("  选 [1]: ").strip() or "1"
+    provider = {"1": "kimi-coding", "2": "bigmodel-anthropic",
+                "3": "zai-coding-cn"}.get(pv, "kimi-coding")
+    api_key = getpass.getpass("  API Key(没有可填 8 位以上任意字符,批准后再换): ")
+    contact = input("  联系方式(选填,回车跳过): ").strip()
+    reason = input("  申请理由(选填,回车跳过): ").strip()
+    data = json.dumps({"username": username, "password": password,
+                       "provider": provider, "api_key": api_key,
+                       "contact": contact, "reason": reason}).encode()
+    req = urllib.request.Request(server.rstrip("/") + "/v1/apply",
+                                 data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with _OPENER.open(req, timeout=15) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        print("  已提交:%s" % d.get("msg", ""))
+        print("  等管理员批准后,重新运行本程序向导选 1 登录(或 TUI 里 /login)。")
+    except Exception as e:
+        print("  注册失败:%s(未保存任何配置,可重试)" % _err_text(e))
+
+
 def _verify_token(server, token):
     """贴 token 时当场向服务器验一次,防贴错/半截存进配置(向导 2 号路径用)。"""
     req = urllib.request.Request(server.rstrip("/") + "/v1/usage")
@@ -1819,8 +1848,12 @@ def main():
             server = input("  服务器 [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
             print("  1) 账号密码登录(推荐,审批通过后即可用)")
             print("  2) 直接贴 token(mda_ 开头,管理员发的)")
+            print("  3) 注册新账号(提交申请,等管理员批准)")
             choice = input("  选 [1]: ").strip() or "1"
             token = ""
+            if choice == "3":
+                _register_flow(server)
+                return
             if choice == "1":
                 import getpass
                 user = input("  用户名: ").strip()

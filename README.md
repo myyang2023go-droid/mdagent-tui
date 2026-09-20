@@ -48,7 +48,13 @@ mdagent
 Windows 同样新开终端输 `mdagent`。若提示找不到命令,Linux/macOS 重开终端
 (或 `export PATH="$HOME/.local/bin:$PATH"`)。
 
-没有账号?在云端首页提交注册申请(自带大模型 API key),获批后即可登录。
+没有账号?三选一注册:
+
+- 浏览器打开 <https://47.94.209.90/mdagent/register.html> 填表提交(推荐)
+- TUI 首跑向导里选 `3` 在终端注册
+- 命令行:`curl -sk https://47.94.209.90/mdagent/v1/apply -H 'Content-Type: application/json' -d '{"username":"名字","password":"至少8位","provider":"kimi-coding","api_key":"sk-…"}'`
+
+提交后等管理员批准,即可账号密码登录。
 
 ## 安全模型
 

@@ -92,9 +92,12 @@
 
 <h2><span class="n">3</span>怎么拿到账号 / token</h2>
 <div class="card">
-  <p style="margin-top:0"><b>方式一:申请审批(自助)</b></p>
-  <p>在自己电脑上跑下面这条提交申请(<span class="warn">用户名和密码自己设</span>,大模型 key 填自己的,
-     没有就找管理员要演示账号):</p>
+  <p style="margin-top:0"><b>方式一:网页注册(自助,推荐)</b></p>
+  <p>浏览器打开
+     <a href="https://47.94.209.90/mdagent/register.html" target="_blank">https://47.94.209.90/mdagent/register.html</a>
+     填表提交(会弹证书警告,点「高级 → 继续访问」)。<span class="warn">用户名和密码自己设</span>,
+     大模型 key 填自己的;没有 key 可先填 8 位以上占位,批准后找管理员换。</p>
+  <p>或在 TUI 首跑向导里选 <code>3</code> 直接在终端注册。命令行提交(等效):</p>
   <pre><button class="btn" onclick="cp(this)">复制</button>curl -sk https://47.94.209.90/mdagent/v1/apply \
   -H 'Content-Type: application/json' \
   -d '{"username":"<span class="a">你的用户名</span>","password":"<span class="a">你设的密码</span>",

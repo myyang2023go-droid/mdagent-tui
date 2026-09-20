@@ -1070,6 +1070,8 @@ class CommandInput(Input):
     def action_cmd_esc(self):
         if getattr(self.app, "_cmd_open", False):
             self.app._close_cmd_menu()
+        elif getattr(self.app, "busy", False):
+            self.app.action_interrupt()   # ESC = 打断当前任务(Claude Code 同款)
 
 
 _GOAL_HINT = "当前项目没有进行中的目标\n(多步任务智能体会自动在工作目录建 GOAL.md)"
@@ -1250,6 +1252,7 @@ class MdAgentApp(App):
         self.confirm = None          # "auto_on" 等输入框确认流程
         self.keywiz = None           # /apikey 两步向导:{"step","provider"}
         self.login = None            # /login 两步:{"step","user"}
+        self._job_id = None          # 当前轮询中的 job(ESC 打断用)
         self.approval = None         # (oid, req)
         self.stream_card = None
         self._goal_mtime = None
@@ -1455,6 +1458,7 @@ class MdAgentApp(App):
             self.add_sys("提交失败: %s" % _err_text(e))
             return
         jid = r.get("job_id")
+        self._job_id = jid
         if not jid:
             self._stream_end()
             self.add_sys("提交失败: %s" % r)
@@ -1501,6 +1505,7 @@ class MdAgentApp(App):
             self.stream_card = None
         self.phase = ""
         self.busy = False
+        self._job_id = None
 
     async def _load_history(self, project):
         loop = asyncio.get_event_loop()
@@ -1815,6 +1820,22 @@ class MdAgentApp(App):
             self._resolve_approval(True)
         elif event.button.id == "btn-no":
             self._resolve_approval(False)
+
+    def action_interrupt(self):
+        """ESC 打断:向云端发取消信号;本地继续跟随,收尾文案由服务端回。"""
+        if not self.busy or not self._job_id:
+            return
+        jid = self._job_id
+        self.add_sys("⏹ 正在打断…")
+
+        async def _c():
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, functools.partial(
+                        _http, "POST", "/v1/jobs/%s/cancel" % jid, None, 15))
+            except Exception as e:
+                self.add_sys("打断请求失败: %s" % _err_text(e))
+        asyncio.get_event_loop().create_task(_c())
 
     def action_quit_app(self):
         self.exit()

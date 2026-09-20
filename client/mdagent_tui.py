@@ -1846,6 +1846,14 @@ def main():
         try:
             print("首次配置(只问一次,存 %s,权限 600):" % CONFIG)
             server = input("  服务器 [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
+            preset_token = ""
+            if server.startswith("mda_"):
+                preset_token = server
+                server = DEFAULT_SERVER
+                print("  (检测到你贴的是 token:已当 token 用,服务器取默认 %s)" % server)
+            if not server.startswith(("http://", "https://")):
+                sys.exit("服务器地址须 http(s):// 开头(收到 %r),未保存配置"
+                         % server[:40])
             print("  1) 账号密码登录(推荐,审批通过后即可用)")
             print("  2) 直接贴 token(mda_ 开头,管理员发的)")
             print("  3) 注册新账号(提交申请,等管理员批准)")
@@ -1865,7 +1873,7 @@ def main():
                 except Exception as ex:
                     sys.exit("登录失败: %s" % ex)
             else:
-                token = input("  token: ").strip()
+                token = preset_token or input("  token: ").strip()
                 ok, msg = _verify_token(server, token)
                 if not ok:
                     sys.exit("token 校验失败(%s)——未保存配置,重跑再贴一次" % msg)

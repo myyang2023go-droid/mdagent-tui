@@ -1152,7 +1152,7 @@ def _render_goal(content):
         line = line.strip()
         m = re.match(r"^#\s*(目标|Goal|GOAL)[:：]\s*(.+)$", line)
         if m and not title:
-            title = m.group(1).strip()
+            title = m.group(2).strip()
             continue
         m = re.match(r"^-\s*\[([xX> ])\]\s*(.+)$", line)
         if m:

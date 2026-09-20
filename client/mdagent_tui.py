@@ -1740,29 +1740,34 @@ def main():
                         args.token or cfg.get("token") or "",
                         args.root or cfg.get("root") or "")
     if not cfg.get("token"):
-        # 首次配置:进全屏前用普通 input 问完(免得在 TUI 里做表单)
-        print("首次配置(只问一次,存 %s,权限 600):" % CONFIG)
-        server = input("  服务器 [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
-        print("  1) 账号密码登录(推荐,审批通过后即可用)")
-        print("  2) 直接贴 token(mda_ 开头,管理员发的)")
-        choice = input("  选 [1]: ").strip() or "1"
-        token = ""
-        if choice == "1":
-            import getpass
-            user = input("  用户名: ").strip()
-            pwd = getpass.getpass("  密码: ")
-            try:
-                d = _login(server, user, pwd)
-                token = d["token"]
-                print("  登录成功(token 已自动获取)")
-            except Exception as ex:
-                sys.exit("登录失败: %s" % ex)
-        else:
-            token = input("  token: ").strip()
-        root = input("  开放给智能体的目录 [%s]: " % os.getcwd()).strip() or os.getcwd()
-        if not token.startswith("mda_"):
-            sys.exit("token 格式不对(mda_ 开头)")
-        cfg = _save_cfg(server, token, root)
+        # 首次配置:进全屏前用普通 input 问完(免得在 TUI 里做表单)。
+        # EOF 兜底:curl|sh 管道跑时 stdin 是管道,input 立即 EOF——指路直跑
+        try:
+            print("首次配置(只问一次,存 %s,权限 600):" % CONFIG)
+            server = input("  服务器 [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
+            print("  1) 账号密码登录(推荐,审批通过后即可用)")
+            print("  2) 直接贴 token(mda_ 开头,管理员发的)")
+            choice = input("  选 [1]: ").strip() or "1"
+            token = ""
+            if choice == "1":
+                import getpass
+                user = input("  用户名: ").strip()
+                pwd = getpass.getpass("  密码: ")
+                try:
+                    d = _login(server, user, pwd)
+                    token = d["token"]
+                    print("  登录成功(token 已自动获取)")
+                except Exception as ex:
+                    sys.exit("登录失败: %s" % ex)
+            else:
+                token = input("  token: ").strip()
+            root = input("  开放给智能体的目录 [%s]: " % os.getcwd()).strip() or os.getcwd()
+            if not token.startswith("mda_"):
+                sys.exit("token 格式不对(mda_ 开头)")
+            cfg = _save_cfg(server, token, root)
+        except EOFError:
+            sys.exit("\n[!] 没有可用的交互输入(命令可能经管道运行,如 curl … | sh)。\n"
+                     "    请进入解压后的目录直接运行: python3 client/mdagent_tui.py")
     STATE["cfg"] = cfg
     STATE["jail"] = Jail(cfg.get("root") or os.getcwd())
     if STATE["jail"].root.parent == STATE["jail"].root or \

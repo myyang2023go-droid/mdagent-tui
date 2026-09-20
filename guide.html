@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mdagent · 使用指南</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161b27; --line:#232a3b; --card:#1a2030;
+    --txt:#c9d1e0; --dim:#5f6b7a; --blue:#5686fe; --amber:#d29922;
+    --green:#3fb950; --red:#f85149; --code:#12151d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.75 "PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:32px 20px 64px}
+  header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px}
+  .logo{font-size:28px;font-weight:700;color:#eaf0fb;letter-spacing:1px}
+  .logo .exp{color:var(--blue)}
+  .tag{display:inline-block;margin-left:10px;padding:2px 10px;border-radius:99px;
+       border:1px solid var(--line);color:var(--dim);font-size:12px;vertical-align:4px}
+  .sub{color:var(--dim);margin-top:8px;font-size:14px}
+  h2{font-size:18px;color:#eaf0fb;margin:40px 0 14px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+        border-radius:7px;background:var(--blue);color:#fff;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:18px 20px;margin:14px 0}
+  .os{font-weight:600;color:#eaf0fb;margin-bottom:8px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;
+      padding:12px 14px;overflow-x:auto;position:relative;
+      font:13px/1.6 ui-monospace,Consolas,Menlo,monospace;color:#9fb0c8}
+  pre .c{color:#e6eaf2}
+  pre .a{color:var(--amber)}
+  .btn{position:absolute;top:8px;right:8px;border:1px solid var(--line);border-radius:6px;
+       background:#1a2030;color:var(--dim);font-size:12px;padding:2px 10px;cursor:pointer}
+  .btn:hover{color:var(--txt);border-color:var(--blue)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{padding:8px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:var(--panel);color:#97a0b0;font-weight:600;white-space:nowrap}
+  td code,p code,li code{background:var(--code);border:1px solid var(--line);
+       border-radius:5px;padding:1px 7px;font-size:13px;color:var(--amber)}
+  .note{border-left:3px solid var(--amber);background:rgba(210,153,34,.07);
+        padding:10px 14px;border-radius:0 8px 8px 0;font-size:14px}
+  .ok{color:var(--green)} .warn{color:var(--amber)}
+  .steps td:first-child{color:var(--blue);font-weight:600;white-space:nowrap}
+  footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);
+         color:var(--dim);font-size:13px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  @media print{body{background:#fff;color:#111}.card,pre{border-color:#ddd}pre{color:#333}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo">MD<span class="exp">ᴱˣᵖ</span> 智能体终端<span class="tag">使用指南</span></div>
+  <div class="sub">云端大脑 + 你电脑上的终端:对话、项目记忆、文件读写全程你批准。装好只花一分钟。</div>
+</header>
+
+<h2><span class="n">1</span>一键安装</h2>
+
+<div class="card">
+  <div class="os">🐧 Linux / macOS —— 一条命令</div>
+  <pre><button class="btn" onclick="cp(this)">复制</button><span class="c">curl -fsSL</span> https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main/quick_tui.sh <span class="a">|</span> sh</pre>
+  <p style="color:var(--dim);margin:6px 0 0">自动完成:下载 → 安装依赖(textual)→ 启动。需要 Python ≥ 3.8。</p>
+</div>
+
+<div class="card">
+  <div class="os">🪟 Windows —— 下载解压双击</div>
+  <table style="margin:0">
+    <tr><td style="border:none;padding:4px 8px 4px 0">①</td>
+        <td style="border:none;padding:4px 0">打开仓库页
+        <a href="https://github.com/myyang2023go-droid/mdagent-tui" target="_blank">github.com/myyang2023go-droid/mdagent-tui</a>
+        → 绿色 <code>Code</code> 按钮 → <code>Download ZIP</code></td></tr>
+    <tr><td style="border:none;padding:4px 8px 4px 0">②</td>
+        <td style="border:none;padding:4px 0">解压后双击 <code>install-windows.bat</code>(没装 Python 会提示你先装)</td></tr>
+  </table>
+</div>
+
+<h2><span class="n">2</span>首跑向导(共答三下)</h2>
+<div class="card">
+<table class="steps">
+  <tr><th>提示</th><th>输入</th><th>说明</th></tr>
+  <tr><td>服务器</td><td><b>直接回车</b></td><td>连默认云端;自建服务器填自己的地址</td></tr>
+  <tr><td>选 1 / 2</td><td><code>1</code> 或 <code>2</code></td><td>1 = 账号密码登录(推荐) · 2 = 直接贴 <code>mda_</code> 开头的 token</td></tr>
+  <tr><td>开放目录</td><td>选个空文件夹</td><td>云端智能体只能读写这个目录里的文件</td></tr>
+</table>
+</div>
+
+<h2><span class="n">3</span>怎么拿到账号 / token</h2>
+<div class="card">
+  <p style="margin-top:0"><b>方式一:申请审批(自助)</b></p>
+  <p>在自己电脑上跑下面这条提交申请(<span class="warn">用户名和密码自己设</span>,大模型 key 填自己的,
+     没有就找管理员要演示账号):</p>
+  <pre><button class="btn" onclick="cp(this)">复制</button>curl -sk https://47.94.209.90/mdagent/v1/apply \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"<span class="a">你的用户名</span>","password":"<span class="a">你设的密码</span>",
+       "provider":"kimi-coding","api_key":"<span class="a">sk-你的大模型key</span>"}'</pre>
+  <p>提交后状态为 <code>pending</code>,等管理员批准,然后就能在向导里选 <code>1</code> 用账号密码登录。</p>
+  <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+  <p style="margin-bottom:0"><b>方式二:管理员直接发 token</b></p>
+  <p style="margin-bottom:0">管理员发给你一串 <code>mda_…</code> 开头的令牌 → 向导里选 <code>2</code> 贴进去即可。
+     之后可在 TUI 里输入 <code>/apikey</code> 换成自己的大模型 key、<code>/passwd</code> 设自己的密码。</p>
+</div>
+
+<h2><span class="n">4</span>安全须知(为什么放心用)</h2>
+<div class="card">
+<ul style="margin:0;padding-left:20px">
+  <li><b>目录囚禁</b>:云端对你电脑的读写只限你选的开放目录,越界一律拒绝</li>
+  <li><b>写操作逐笔批准</b>:每次写/改/删文件弹批准卡,<span class="warn">100 秒不答自动拒</span>
+      (想免确认可输 <code>/auto</code>,自负其责)</li>
+  <li><b>绝不野跑</b>:智能体想直接跑 MD 引擎(lmp/gmx/mpirun…)会被硬拒;受管机器上必须走
+      <code>supervise</code> 编排门发车,全程留痕</li>
+  <li><b>令牌安全</b>:token 只存本机 <code>~/.mdagent_client.json</code>(权限 600);
+      连接做证书指纹校验,防中间人冒充</li>
+</ul>
+</div>
+
+<h2><span class="n">5</span>常用命令</h2>
+<div class="card">
+<table>
+  <tr><th>命令</th><th>作用</th></tr>
+  <tr><td><code>/project 名字</code></td><td>切会话项目(上下文独立,自动回放云端历史)</td></tr>
+  <tr><td><code>/root 目录</code></td><td>换开放给智能体的本地目录</td></tr>
+  <tr><td><code>/auto</code></td><td>写操作免确认开关(默认关)</td></tr>
+  <tr><td><code>/goal</code></td><td>目标面板:多步任务进度</td></tr>
+  <tr><td><code>/apikey</code></td><td>换大模型 API Key</td></tr>
+  <tr><td><code>/status</code></td><td>连接状态 + 每小时用量</td></tr>
+  <tr><td><code>/help</code></td><td>全部命令(输入 <code>/</code> 自动弹菜单)</td></tr>
+</table>
+</div>
+
+<footer>
+  云端 <a href="https://47.94.209.90/mdagent" target="_blank">https://47.94.209.90/mdagent</a>
+   · 客户端 <a href="https://github.com/myyang2023go-droid/mdagent-tui" target="_blank">mdagent-tui</a>
+   · MIT
+</footer>
+
+</div>
+<script>
+function cp(b){
+  var t=b.parentElement.innerText.replace(/^复制\n?/m,'').replace(/^复制$/,'');
+  navigator.clipboard.writeText(t.trim()).then(function(){b.textContent='已复制';
+    setTimeout(function(){b.textContent='复制'},1500);});
+}
+</script>
+</body>
+</html>

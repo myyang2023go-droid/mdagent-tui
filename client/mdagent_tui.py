@@ -891,7 +891,9 @@ class Banner(Static):
             t.append("  " + line + "\n", style="bold #5686FE")
         t.append("  云端 MD 智能体 · 终端工作台\n", style="bold #C9D1E0")
         t.append("  脑子在云端(%s)\n" % server, style="#5F6B7A")
-        t.append("  开放目录 %s · 写/删逐笔批准 · /login 登录 · /help 看命令\n" % root,
+        t.append("  拖选文字 → Ctrl+C 复制 · 想要滚轮: /mouse · /login 登录\n",
+                 style="#3A4152")
+        t.append("  开放目录 %s · 写/删逐笔批准 · /help 看命令\n" % root,
                  style="#5F6B7A")
         super().__init__(t, classes="banner")
 
@@ -1272,6 +1274,13 @@ class MdAgentApp(App):
         global _APP
         _APP = self
         self.query_one("#side").display = False   # Claude Code 式:默认无侧栏
+        # 默认关鼠标捕获:开箱即可原生拖选复制(代价滚轮失效,/mouse 可开回)
+        try:
+            drv = self._driver
+            if drv is not None:
+                drv._disable_mouse_support()
+        except Exception:
+            pass
         asyncio.get_event_loop().create_task(self._mount(
             Banner(STATE["cfg"]["server"], str(STATE["jail"].root))))
         self.set_interval(0.3, self._check_pending)

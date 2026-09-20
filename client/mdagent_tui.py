@@ -6,16 +6,26 @@
 用法:
   python3 mdagent_tui.py --token mda_xxx          # 首次
   python3 mdagent_tui.py                          # 之后免参数
+  mdagent --resume                                # 挑旧项目续做(-c = 最近的)
+  mdagent --project 名字                          # 直接指定项目
+
+本地策略(同 Claude Code 的 CLAUDE.md):在开放目录放一个 mdagent.md,
+写你的规矩/偏好/项目背景,每轮对话自动注入云端(标记为策略,不进对话历史,
+不算轮次);/policy 查看。计算/仿真类任务智能体会按纪律先建分类任务文件夹,
+并在其中维护任务级 mdagent.md 记录目标/参数/进度,--resume 续做接着读。
 
 界面(Claude Code 风格 clean-room 外壳,Textual 渲染):全宽 transcript
 (用户 ❯ 前缀、智能体 markdown 流式 ▌、思维链暗色斜体流、文件操作 ⏺ 行)
 + 底部圆角输入框 + 底部状态条(spinner/项目/目录/用量);目标与文件操作
 面板收进 Ctrl+G 侧坞;云端要写本地文件时弹琥珀色批准卡,按 y 批准 / n 拒绝
-(100s 未答自动拒)。
+(100s 未答自动拒)。任务跑着时按 ESC 可打断(Claude Code 同款,
+云端温和收尾,已完成的步骤不丢)。
 
 命令(输入框里打):
   /login         账号密码登录(token 自动取回,密码不回显;换号/重登都用它)
+  /resume        挑旧项目续做(按最近活跃排序;也收序号/名字,/resume 3)
   /project <名>  切换会话项目(不同项目上下文独立,切了自动回放云端历史)
+  /policy        查看/重载本地策略 mdagent.md
   /root <目录>   切换开放给智能体的本地目录
   /auto          写操作免确认开关(默认关,逐笔批准)
   /goal          目标面板(查看当前任务进度)
@@ -250,7 +260,23 @@ STATE = {
     "last_poll": 0.0,
     "extra_readable": set(),             # 上轨 case 目录(只读放行, 越 jail)
     "gate": None,                        # mdrun_gate 探测缓存(None=未探测)
+    "policy": "",                        # 本地 mdagent.md 策略(每轮随消息上送)
 }
+
+
+def _read_policy():
+    """读开放目录根下的 mdagent.md(同 Claude Code 的 CLAUDE.md):
+    每轮作为 policy 字段随消息上送,云端标记为策略注入,不进对话历史。"""
+    j = STATE.get("jail")
+    if not j:
+        return ""
+    try:
+        p = j.root / "mdagent.md"
+        if not p.is_file():
+            return ""
+        return p.read_text(encoding="utf-8", errors="replace")[:12000]
+    except Exception:
+        return ""
 
 
 def _gate_available():
@@ -1029,6 +1055,8 @@ class ApprovalCard(Horizontal):
 # (命令, 参数, 说明) —— / 菜单与 /help 共用的唯一事实源
 _COMMANDS = [
     ("/project", "<名>", "换会话项目(上下文独立,自动回放云端历史)"),
+    ("/resume", "[序号]", "挑旧项目续做(按最近活跃排序,历史自动回放)"),
+    ("/policy", "", "查看/重载本地策略 mdagent.md"),
     ("/archive", "[名]", "归档项目(会话+项目空间收进云端归档区,缺省=当前)"),
     ("/restore", "<名>", "恢复最近一次归档的项目"),
     ("/root", "<目录>", "换开放给智能体的本地目录"),
@@ -1252,6 +1280,7 @@ class MdAgentApp(App):
         self.confirm = None          # "auto_on" 等输入框确认流程
         self.keywiz = None           # /apikey 两步向导:{"step","provider"}
         self.login = None            # /login 两步:{"step","user"}
+        self.resume = None           # /resume 待选:{"items":[…]}
         self._job_id = None          # 当前轮询中的 job(ESC 打断用)
         self.approval = None         # (oid, req)
         self.stream_card = None
@@ -1291,6 +1320,13 @@ class MdAgentApp(App):
         self.set_interval(2, self._tick)
         self.set_interval(3, self._poll_goal)
         asyncio.get_event_loop().create_task(self._load_history(_PROJECT))
+        STATE["policy"] = _read_policy()
+        if STATE["policy"]:
+            self.add_sys("本地策略已加载: mdagent.md(%d 字,每轮自动附带,"
+                         "不进对话历史;/policy 查看)" % len(STATE["policy"]))
+        else:
+            self.add_sys("提示: 在开放目录放一个 mdagent.md(同 Claude Code 的 "
+                         "CLAUDE.md)可固化你的规矩,每轮自动生效。")
         self.query_one("#composer", Input).focus()
 
     def _spin(self):
@@ -1429,6 +1465,9 @@ class MdAgentApp(App):
         if self.keywiz:
             self._keywiz_step(text)
             return
+        if self.resume:
+            self._resume_step(text)
+            return
         if not text:
             return
         if text.startswith("/"):
@@ -1452,7 +1491,8 @@ class MdAgentApp(App):
         try:
             r = await loop.run_in_executor(None, functools.partial(
                 _http, "POST", "/v1/chat",
-                {"project": _PROJECT, "message": text}, 20))
+                {"project": _PROJECT, "message": text,
+                 "policy": STATE.get("policy") or ""}, 20))
         except Exception as e:
             self._stream_end()
             self.add_sys("提交失败: %s" % _err_text(e))
@@ -1552,6 +1592,10 @@ class MdAgentApp(App):
                 _save_cfg(cfg["server"], cfg["token"], str(j.root))
                 cfg["root"] = str(j.root)
             self.add_sys("开放目录已切换: %s" % j.root)
+            STATE["policy"] = _read_policy()
+            self.add_sys("本地策略 mdagent.md: %s" % (
+                "已加载 %d 字" % len(STATE["policy"]) if STATE["policy"]
+                else "此目录没有(放一个即可自动生效)"))
             if j.root.parent == j.root or j.root == Path.home():
                 self.add_sys("!! 警告: 开放的是整盘/家目录,其中文件可被远程读取,"
                              "写入仍需逐笔批准;建议只开放项目目录")
@@ -1578,6 +1622,17 @@ class MdAgentApp(App):
                 self.confirm = "auto_on"
                 self.add_sys("开启后写文件不再逐笔询问(仍限开放目录内)。"
                              "确认请在输入框输入 yes,其它取消")
+        elif cmd == "resume":
+            asyncio.get_event_loop().create_task(self._resume_cmd(arg))
+        elif cmd == "policy":
+            STATE["policy"] = _read_policy()
+            if STATE["policy"]:
+                self.add_sys("mdagent.md(%s)共 %d 字,每轮自动附带。前 600 字:\n%s"
+                             % (STATE["jail"].root / "mdagent.md",
+                                len(STATE["policy"]), STATE["policy"][:600]))
+            else:
+                self.add_sys("开放目录没有 mdagent.md,建一个即自动生效: %s"
+                             % (STATE["jail"].root / "mdagent.md"))
         elif cmd == "login":
             self.login = {"step": "user"}
             inp = self.query_one("#composer", Input)
@@ -1703,6 +1758,53 @@ class MdAgentApp(App):
             self.add_sys("已取消")
             return
         asyncio.get_event_loop().create_task(self._login_do(st["user"], text))
+
+    async def _resume_cmd(self, arg):
+        loop = asyncio.get_event_loop()
+        try:
+            d = await loop.run_in_executor(None, functools.partial(
+                _http, "GET", "/v1/conversations", None, 15))
+        except Exception as e:
+            self.add_sys("取项目列表失败: %s" % _err_text(e))
+            return
+        items = d.get("detail") or []
+        if not items:
+            self.add_sys("云端还没有你的项目,直接开聊即可;新项目用 /project <名>")
+            return
+        if arg:
+            self._resume_pick(arg, items)
+            return
+        self.add_sys("—— 你的项目(按最近活跃) ——")
+        for i, it in enumerate(items[:20], 1):
+            ts = time.strftime("%m-%d %H:%M",
+                               time.localtime(it.get("mtime") or 0))
+            self.add_sys("%2d. %-28s 最后活跃 %s" % (i, it.get("name"), ts))
+        self.resume = {"items": items[:20]}
+        self.add_sys("输序号续做对应项目(也可输项目名;直接回车取消)")
+
+    def _resume_pick(self, text, items):
+        global _PROJECT
+        name = ""
+        if isinstance(text, str) and text.isdigit():
+            i = int(text) - 1
+            if 0 <= i < len(items):
+                name = items[i].get("name") or ""
+        if not name:
+            name = text if any(it.get("name") == text for it in items) else ""
+        if not name:
+            self.add_sys("没选到「%s」对应的项目,再试 /resume" % text)
+            return
+        _PROJECT = name
+        self.add_sys("已续上项目「%s」,回放云端历史…" % name)
+        asyncio.get_event_loop().create_task(self._load_history(name))
+
+    def _resume_step(self, text):
+        items = (self.resume or {}).get("items") or []
+        self.resume = None
+        if not text:
+            self.add_sys("已取消 /resume")
+            return
+        self._resume_pick(text, items)
 
     def _login_cancel(self):
         self.login = None
@@ -1855,10 +1957,17 @@ class MdAgentApp(App):
 
 
 def main():
+    global _PROJECT
     ap = argparse.ArgumentParser(description="mdagent TUI 客户端(终端里的云端智能体)")
     ap.add_argument("--server", default=None)
     ap.add_argument("--token", default=None)
     ap.add_argument("--root", default=None)
+    ap.add_argument("--project", "-p", default=None,
+                    help="直接指定会话项目")
+    ap.add_argument("--resume", action="store_true",
+                    help="启动时挑旧项目续做(列出按最近活跃排序)")
+    ap.add_argument("-c", "--continue", dest="cont", action="store_true",
+                    help="直接续做最近的项目")
     args = ap.parse_args()
 
     cfg = _load_cfg() or {}
@@ -1922,6 +2031,35 @@ def main():
         print("!! 警告: 开放的是整盘/家目录,其中文件可被远程读取;"
               "建议只开放项目目录(可用 /root 换)")
 
+    if args.project:
+        _PROJECT = args.project
+        print("会话项目: %s(启动后自动回放云端历史)" % _PROJECT)
+    if args.resume or args.cont:
+        try:
+            d = _http("GET", "/v1/conversations", None, 15)
+            items = d.get("detail") or []
+            if not items:
+                print("云端还没有你的项目,直接开聊即可")
+            elif args.cont:
+                _PROJECT = items[0]["name"]
+                print("续做最近项目「%s」" % _PROJECT)
+            else:
+                print("你的项目(按最近活跃排序):")
+                for i, it in enumerate(items[:20], 1):
+                    print("  %2d. %-28s 最后活跃 %s"
+                          % (i, it.get("name"),
+                             time.strftime("%m-%d %H:%M",
+                                           time.localtime(it.get("mtime") or 0))))
+                sel = input("续做哪个 [1]: ").strip() or "1"
+                i = int(sel) - 1 if sel.isdigit() else -1
+                if not (0 <= i < len(items[:20])):
+                    sys.exit("序号无效")
+                _PROJECT = items[i]["name"]
+                print("已选「%s」(启动后自动回放云端历史)" % _PROJECT)
+        except EOFError:
+            sys.exit("\n[!] 无交互输入(管道运行),请改用 --project <名>")
+        except Exception as e:
+            print("(取项目列表失败: %s,沿用默认项目)" % _err_text(e))
     threading.Thread(target=_bridge_loop, daemon=True).start()
     try:
         MdAgentApp().run()

@@ -123,12 +123,36 @@
 </ul>
 </div>
 
-<h2><span class="n">5</span>常用命令</h2>
+<h2><span class="n">5</span>本地策略 mdagent.md(同 Claude Code 的 CLAUDE.md)</h2>
+<div class="card">
+  <p style="margin-top:0">在开放目录放一个 <code>mdagent.md</code>,写你的规矩/偏好/项目背景:</p>
+  <pre><button class="btn" onclick="cp(this)">复制</button><span class="c"># 我的策略</span>
+- 回复用中文,先给结论再给细节
+- LAMMPS 输入统一用 metal 单位制
+- 每次跑完模拟自动出温度/能量曲线</pre>
+  <p style="margin-bottom:0">之后<b>每轮对话自动附带</b>(云端标记为策略注入,<span class="warn">不进对话历史、不算轮次</span>);
+  <code>/policy</code> 随时查看,改完文件即生效。计算/仿真类任务,智能体会按内置纪律
+  先在开放目录建分类任务文件夹,并在其中维护任务级 <code>mdagent.md</code>(目标/参数/进度),续做时先读它。</p>
+</div>
+
+<h2><span class="n">6</span>续做旧项目(--resume)</h2>
+<div class="card">
+<pre><button class="btn" onclick="cp(this)">复制</button>mdagent --resume          <span class="c"># 列出项目(按最近活跃),输序号续做</span>
+mdagent -c               <span class="c"># 直接续做最近的项目</span>
+mdagent --project 名字    <span class="c"># 直接指定项目</span></pre>
+  <p style="margin:6px 0 0">进去之后也可随时 <code>/resume</code>(列表选号)或 <code>/project 名字</code> 切换,
+  切了自动回放云端历史。</p>
+</div>
+
+<h2><span class="n">7</span>常用命令</h2>
 <div class="card">
 <table>
-  <tr><th>命令</th><th>作用</th></tr>
+  <tr><th>命令 / 按键</th><th>作用</th></tr>
+  <tr><td><code>ESC</code></td><td><b>打断当前任务</b>(Claude Code 同款;云端温和收尾,已完成步骤不丢)</td></tr>
   <tr><td><code>/login</code></td><td><b>账号密码登录</b>(token 自动取回、密码不回显;换号/重登都用它)</td></tr>
+  <tr><td><code>/resume</code></td><td>挑旧项目续做(按最近活跃排序,输序号即切)</td></tr>
   <tr><td><code>/project 名字</code></td><td>切会话项目(上下文独立,自动回放云端历史)</td></tr>
+  <tr><td><code>/policy</code></td><td>查看/重载本地策略 <code>mdagent.md</code></td></tr>
   <tr><td><code>/root 目录</code></td><td>换开放给智能体的本地目录</td></tr>
   <tr><td><code>/auto</code></td><td>写操作免确认开关(默认关)</td></tr>
   <tr><td><code>/goal</code></td><td>目标面板:多步任务进度</td></tr>

@@ -173,16 +173,36 @@ def _err_text(e):
 
 
 
+# (provider_id, 显示名, 控制台取 key 的网址)——注册流与 /apikey 共用
+PROVIDER_MENU = [
+    ("kimi-coding", "Kimi(moonshot)",
+     "https://platform.moonshot.cn/console/api-keys"),
+    ("bigmodel-anthropic", "GLM(bigmodel)",
+     "https://open.bigmodel.cn/usercenter/apikeys"),
+    ("zai-coding-cn", "Z.ai(zhipu)",
+     "https://z.ai/manage/apikey"),
+    ("deepseek", "DeepSeek",
+     "https://platform.deepseek.com/api_keys"),
+    ("qwen-token-plan-cn", "通义Qwen(阿里百炼)",
+     "https://bailian.console.aliyun.com/"),
+    ("minimax-cn", "MiniMax",
+     "https://platform.minimaxi.com/user-center/basic-information/interface-key"),
+]
+
+
 def _register_flow(server):
     """终端内注册:收集字段 POST /v1/apply,提交后退出等审批(与网页注册页同接口)。"""
     import getpass
     print("  注册新账号(与网页注册页 %s/mdagent/register.html 等效):" % server.rstrip("/"))
     username = input("  用户名(3-16位,小写字母开头): ").strip()
     password = getpass.getpass("  密码(至少8位,不回显): ")
-    print("  大模型服务: 1) Kimi(moonshot)  2) GLM(bigmodel)  3) Z.ai(zhipu)")
+    print("  大模型服务(自带 key,对话消耗它):")
+    for i, (_pid, label, _u) in enumerate(PROVIDER_MENU, 1):
+        print("    %d) %s" % (i, label))
     pv = input("  选 [1]: ").strip() or "1"
-    provider = {"1": "kimi-coding", "2": "bigmodel-anthropic",
-                "3": "zai-coding-cn"}.get(pv, "kimi-coding")
+    i = int(pv) - 1 if pv.isdigit() else -1
+    provider = PROVIDER_MENU[i][0] if 0 <= i < len(PROVIDER_MENU) \
+        else "kimi-coding"
     api_key = getpass.getpass("  API Key(没有可填 8 位以上任意字符,批准后再换): ")
     contact = input("  联系方式(选填,回车跳过): ").strip()
     reason = input("  申请理由(选填,回车跳过): ").strip()
@@ -1640,14 +1660,11 @@ class MdAgentApp(App):
             inp.placeholder = "用户名(直接回车取消 /login)"
             self.add_sys("登录:输入用户名(直接回车取消)")
         elif cmd == "apikey":
-            url = "https://platform.moonshot.cn/console/api-keys"
-            self.add_sys("换大模型 API Key:正在浏览器打开 Kimi 控制台,"
-                         "登录后复制 sk- 开头的 key 回来粘贴")
-            self.add_sys("没自动打开就手动访问: %s" % url)
-            threading.Thread(target=lambda: webbrowser.open(url),
-                             daemon=True).start()
+            self.add_sys("换大模型 API Key:选服务(回车 = 1 Kimi),"
+                         "选中后自动在浏览器打开它的控制台:")
+            for i, (_pid, label, _u) in enumerate(PROVIDER_MENU, 1):
+                self.add_sys("  %d) %s" % (i, label))
             self.keywiz = {"step": "provider"}
-            self.add_sys("第 1 步:provider(直接回车 = kimi-coding)")
         elif cmd == "mouse":
             try:
                 drv = self._driver
@@ -1833,7 +1850,21 @@ class MdAgentApp(App):
         wiz = self.keywiz
         inp = self.query_one("#composer", Input)
         if wiz["step"] == "provider":
-            wiz["provider"] = text.strip() or "kimi-coding"
+            sel = text.strip()
+            i = int(sel) - 1 if sel.isdigit() else -2
+            if 0 <= i < len(PROVIDER_MENU):
+                pid, _label, url = PROVIDER_MENU[i]
+            else:
+                pid = sel or "kimi-coding"
+                url = dict((m[0], m[2]) for m in PROVIDER_MENU).get(pid, "")
+            if url:
+                self.add_sys("正在浏览器打开控制台(%s),登录后复制 API key "
+                             "回来粘贴;没打开就手动访问: %s" % (pid, url))
+                threading.Thread(target=lambda: webbrowser.open(url),
+                                 daemon=True).start()
+            else:
+                self.add_sys("provider=%s(无已知控制台网址,直接贴 key)" % pid)
+            wiz["provider"] = pid
             wiz["step"] = "key"
             inp.password = True      # key 不回显
             inp.placeholder = "粘贴 sk- 开头的 API Key(不回显),回车提交"

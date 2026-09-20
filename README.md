@@ -81,6 +81,10 @@ Windows 同样新开终端输 `mdagent`。若提示找不到命令,Linux/macOS �
 - TUI 首跑向导里选 `3` 在终端注册
 - 命令行:`curl -sk https://47.94.209.90/mdagent/v1/apply -H 'Content-Type: application/json' -d '{"username":"名字","password":"至少8位","provider":"kimi-coding","api_key":"sk-…"}'`
 
+大模型服务六选一(自带 key,对话消耗自己的额度;`/apikey` 随时可换,
+会自动打开对应控制台):Kimi(moonshot)、GLM(bigmodel)、Z.ai(zhipu)、
+**DeepSeek**、通义 Qwen(阿里百炼)、MiniMax。
+
 提交后等管理员批准,即可账号密码登录。
 
 ## 安全模型

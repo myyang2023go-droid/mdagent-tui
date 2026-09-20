@@ -102,6 +102,16 @@
   -H 'Content-Type: application/json' \
   -d '{"username":"<span class="a">你的用户名</span>","password":"<span class="a">你设的密码</span>",
        "provider":"kimi-coding","api_key":"<span class="a">sk-你的大模型key</span>"}'</pre>
+  <p><b>大模型服务六选一</b>(自带 key,对话消耗自己的额度;TUI 里 <code>/apikey</code> 随时可换):</p>
+  <table>
+    <tr><th>服务</th><th>provider</th><th>取 key 的地方</th></tr>
+    <tr><td>Kimi(moonshot)</td><td><code>kimi-coding</code></td><td>platform.moonshot.cn → API Key 管理</td></tr>
+    <tr><td>GLM(bigmodel)</td><td><code>bigmodel-anthropic</code></td><td>open.bigmodel.cn → API Keys</td></tr>
+    <tr><td>Z.ai(zhipu)</td><td><code>zai-coding-cn</code></td><td>z.ai → Manage API Key</td></tr>
+    <tr><td>DeepSeek</td><td><code>deepseek</code></td><td>platform.deepseek.com → API Keys</td></tr>
+    <tr><td>通义 Qwen</td><td><code>qwen-token-plan-cn</code></td><td>阿里云百炼控制台</td></tr>
+    <tr><td>MiniMax</td><td><code>minimax-cn</code></td><td>platform.minimaxi.com → 接口密钥</td></tr>
+  </table>
   <p>提交后状态为 <code>pending</code>,等管理员批准,然后就能在向导里选 <code>1</code> 用账号密码登录。</p>
   <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
   <p style="margin-bottom:0"><b>方式二:管理员直接发 token</b></p>

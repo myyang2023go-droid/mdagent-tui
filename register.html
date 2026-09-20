@@ -49,14 +49,17 @@
     <label><b>密码</b> * <div class="hint">至少 8 位</div></label>
     <input id="password" type="password" autocomplete="new-password" placeholder="设一个密码">
 
-    <label>大模型服务 * <div class="hint">对话消耗该 key 的额度;没有 key 可先随便填满 8 位,批准后找管理员换</div></label>
+    <label>大模型服务 * <div class="hint">对话消耗该 key 自己的额度;没有 key 可先随便填满 8 位,批准后用 /apikey 再换</div></label>
     <select id="provider">
       <option value="kimi-coding">Kimi(moonshot)</option>
       <option value="bigmodel-anthropic">GLM(bigmodel)</option>
       <option value="zai-coding-cn">Z.ai(zhipu)</option>
+      <option value="deepseek">DeepSeek</option>
+      <option value="qwen-token-plan-cn">通义 Qwen(阿里百炼)</option>
+      <option value="minimax-cn">MiniMax</option>
     </select>
 
-    <label>API Key * <div class="hint">sk- 开头的大模型密钥</div></label>
+    <label>API Key * <div class="hint">对应服务的 API 密钥(DeepSeek 在 platform.deepseek.com → API Keys 申请)</div></label>
     <input id="api_key" type="password" autocomplete="off" placeholder="sk-…">
 
     <label>联系方式 <div class="hint">选填,方便管理员联系你</div></label>

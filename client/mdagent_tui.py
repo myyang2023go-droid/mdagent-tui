@@ -160,6 +160,18 @@ def _err_text(e):
     return str(e)
 
 
+
+def _verify_token(server, token):
+    """贴 token 时当场向服务器验一次,防贴错/半截存进配置(向导 2 号路径用)。"""
+    req = urllib.request.Request(server.rstrip("/") + "/v1/usage")
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with _OPENER.open(req, timeout=15) as r:
+            json.loads(r.read().decode("utf-8", "replace"))
+        return True, ""
+    except Exception as e:
+        return False, _err_text(e)
+
 def _login(server, username, password):
     """账号密码登录换 token(无 token 的裸 POST,仍走证书 pinning)。"""
     data = json.dumps({"username": username, "password": password}).encode()
@@ -1761,6 +1773,10 @@ def main():
                     sys.exit("登录失败: %s" % ex)
             else:
                 token = input("  token: ").strip()
+                ok, msg = _verify_token(server, token)
+                if not ok:
+                    sys.exit("token 校验失败(%s)——未保存配置,重跑再贴一次" % msg)
+                print("  token 校验通过")
             root = input("  开放给智能体的目录 [%s]: " % os.getcwd()).strip() or os.getcwd()
             if not token.startswith("mda_"):
                 sys.exit("token 格式不对(mda_ 开头)")

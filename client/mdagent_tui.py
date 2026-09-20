@@ -698,9 +698,11 @@ def _reject_wild_md_in_script(cmd):
         except Exception:
             continue
         for line in text.splitlines():
-            if line.lstrip().startswith("#"):
+            s = line.strip()
+            if s.startswith("#") or not s:
                 continue
-            why = _reject_wild_md(line)
+            # 缩进也处在命令位:for/if 块内缩进的引擎命令同样要拦
+            why = _reject_wild_md(s)
             if why:
                 return ("No wild runs: script %s contains an MD engine command; MD must"
                         " always run supervised with supervise:true" % name)

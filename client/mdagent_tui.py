@@ -360,6 +360,31 @@ def _docx_text(raw):
     text = _html.unescape(re.sub(r"<[^>]+>", "", xml))
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
+
+def _pdf_text(p, raw):
+    """PDF→纯文本:优先本机 pdftotext;本机没装就把字节传云端解(用户机器
+    常没有 poppler,云端有)。两路都失败报清楚,不退回二进制乱码。上限 8MB。"""
+    import base64
+    import shutil as _shutil
+    if len(raw) > 8 * MAX_FILE_BYTES:
+        raise ValueError("PDF over 8MB unsupported")
+    pdft = _shutil.which("pdftotext")
+    if pdft:
+        r = subprocess.run([pdft, "-enc", "UTF-8", str(p), "-"],
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=30)
+        return r.stdout.decode("utf-8", "replace")[:MAX_FILE_BYTES]
+    cfg = STATE.get("cfg") or _load_cfg()
+    if not cfg:
+        raise RuntimeError("no local pdftotext and cloud not configured")
+    try:
+        d = _http("POST", "/v1/tools/pdf2text",
+                  {"content": base64.b64encode(raw).decode("ascii")}, 60)
+        return str(d.get("text") or "")[:MAX_FILE_BYTES]
+    except Exception as e:
+        raise RuntimeError("PDF text extraction failed (no local pdftotext;"
+                           " cloud fallback error): %s" % _err_text(e))
+
 def _fd_under(fd, base):
     if not os.path.exists("/proc/self/fd"):
         return True
@@ -404,23 +429,15 @@ def _do_op(op):
             with os.fdopen(fd, "rb") as f:
                 if not _fd_under(f.fileno(), base):
                     raise PermissionError("path escapes open dir (post-open check)")
-                limit = (8 if p.suffix.lower() == ".docx" else 1) * MAX_FILE_BYTES
+                limit = (8 if p.suffix.lower() in (".docx", ".pdf") else 1) \
+                    * MAX_FILE_BYTES
                 raw = f.read(limit + 1)  # 流式截断,不信 st_size
             if p.suffix.lower() == ".docx":
                 if len(raw) > 8 * MAX_FILE_BYTES:
                     raise ValueError("docx over 8MB unsupported")
                 content = _docx_text(raw)[:MAX_FILE_BYTES]
             elif p.suffix.lower() == ".pdf":
-                import shutil as _shutil
-                pdft = _shutil.which("pdftotext")
-                if not pdft:
-                    if len(raw) > MAX_FILE_BYTES:
-                        raise ValueError("file over 1MB unsupported (no local pdftotext)")
-                    content = raw.decode("utf-8", errors="replace")
-                r = subprocess.run([pdft, "-enc", "UTF-8", str(p), "-"],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, timeout=30)
-                content = r.stdout.decode("utf-8", "replace")[:MAX_FILE_BYTES]
+                content = _pdf_text(p, raw)
             else:
                 if len(raw) > MAX_FILE_BYTES:
                     raise ValueError("file over 1MB unsupported")

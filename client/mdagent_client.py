@@ -222,24 +222,34 @@ class Client:
         with os.fdopen(fd, "rb") as f:
             if not self.jail.fd_in_jail(f.fileno()):
                 raise PermissionError("路径越出开放目录(打开后回验): %s" % args.get("path"))
-            limit = (8 if p.suffix.lower() == ".docx" else 1) * MAX_FILE_BYTES
+            limit = (8 if p.suffix.lower() in (".docx", ".pdf") else 1) * MAX_FILE_BYTES
             raw = f.read(limit + 1)  # 流式截断,不信 st_size(/proc 类虚报)
         if p.suffix.lower() == ".docx":
             if len(raw) > 8 * MAX_FILE_BYTES:
                 raise ValueError("docx 超过 8MB,不支持")
             content = _docx_text(raw)[:MAX_FILE_BYTES]
         elif p.suffix.lower() == ".pdf":
+            import base64 as _b64
             import shutil as _shutil
             import subprocess as _sp
+            if len(raw) > 8 * MAX_FILE_BYTES:
+                raise ValueError("PDF 超过 8MB,不支持")
             pdft = _shutil.which("pdftotext")
-            if not pdft:
-                if len(raw) > MAX_FILE_BYTES:
-                    raise ValueError("文件超过 1MB,不支持(本机无 pdftotext)")
-                content = raw.decode("utf-8", errors="replace")
-            else:
+            if pdft:
                 r = _sp.run([pdft, "-enc", "UTF-8", str(p), "-"],
                             stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=30)
                 content = r.stdout.decode("utf-8", "replace")[:MAX_FILE_BYTES]
+            else:
+                # 本机无 pdftotext:把字节传云端解(用户机器常没有 poppler)
+                try:
+                    d = _http("POST", "%s/v1/tools/pdf2text" % self.server,
+                              self.token,
+                              {"content": _b64.b64encode(raw).decode("ascii")},
+                              timeout=60)
+                    content = str(d.get("text") or "")[:MAX_FILE_BYTES]
+                except Exception as ex:
+                    raise RuntimeError("PDF 解析失败(本机无 pdftotext,"
+                                       "云端回退也失败): %s" % ex)
         else:
             if len(raw) > MAX_FILE_BYTES:
                 raise ValueError("文件超过 1MB,不支持")

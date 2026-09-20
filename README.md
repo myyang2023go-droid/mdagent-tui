@@ -11,6 +11,54 @@
   ⚠ 云端智能体请求写入: README.md (412 字节)   [批准(y) / 拒绝(n)]
 ```
 
+## 认识 mdagent / Meet mdagent
+
+**中文**
+
+mdagent 是一个**为分子模拟(MD)而生的智能体**:大脑跑在云端,双手长在你电脑的终端里。
+你用自然语言下指令,它建输入文件、分析数据、写报告;每次写你本地的文件都会弹批准卡,
+你不点「批准」,一个字节都落不了盘。
+
+它不只是个聊天壳,有三样真功夫:
+
+- **项目记忆** —— 每个项目上下文独立(`--resume` 随时续做),云端记住你的方案、参数和进度;
+  开放目录放一个 `mdagent.md`(同 Claude Code 的 CLAUDE.md),你的规矩每轮自动生效。
+- **共享进化层** —— 智能体把踩过的坑沉淀成原子经验 → 场景 → 知识卡 → 行为策略,
+  全员共享、持续蒸馏;`/evolution` 打开进化图谱,能亲眼看它变聪明。
+- **绝不野跑** —— 分子动力学引擎(LAMMPS/GROMACS 等)一律不许直接跑;
+  受管机器上走 `supervise` 编排上轨发车,看板留痕、自动守护,普通机器干脆硬拒。
+  你的目录被囚禁在开放文件夹内,越界读写一律拒绝。
+
+大模型六选一自带 key(Kimi / GLM / Z.ai / DeepSeek / 通义 / MiniMax),
+对话烧自己的额度;注册账号 → 管理员批准 → 一条命令开用。
+
+**English**
+
+mdagent is an agent **built for molecular simulation**: its brain runs in the
+cloud, its hands live in a terminal on your machine. You type natural
+language; it prepares input files, analyzes data, writes reports — and every
+write to your local disk pops an approval card first. No click, no bytes.
+
+Beyond the chat shell, three things make it real:
+
+- **Project memory** — each project keeps its own context (`--resume` anytime);
+  the cloud remembers your plans, parameters and progress. Drop a
+  `mdagent.md` (like Claude Code's CLAUDE.md) in your open dir and your rules
+  apply on every turn.
+- **Shared evolution layer** — the agent distills every stumble into
+  atoms → scenarios → knowledge cards → behavior strategies, shared by all
+  users and continuously refined. `/evolution` opens the graph so you can
+  literally watch it get smarter.
+- **No wild runs** — MD engines (LAMMPS/GROMACS/…) are never executed
+  directly. On managed machines, `supervise` launches through an orchestrated,
+  dashboard-tracked pipeline; elsewhere the run is flat-out refused. Your
+  files stay jailed inside the open directory — reads or writes outside it
+  are rejected.
+
+Bring your own LLM key (Kimi / GLM / Z.ai / DeepSeek / Qwen / MiniMax) and
+chat on your own quota. Register → admin approves → one command and you're in.
+
+
 ## 一键安装
 
 **Linux / macOS**(一条命令):

@@ -222,7 +222,8 @@ class Client:
         with os.fdopen(fd, "rb") as f:
             if not self.jail.fd_in_jail(f.fileno()):
                 raise PermissionError("路径越出开放目录(打开后回验): %s" % args.get("path"))
-            limit = (8 if p.suffix.lower() in (".docx", ".pdf") else 1) * MAX_FILE_BYTES
+            limit = (32 if p.suffix.lower() == ".pdf" else
+                    (8 if p.suffix.lower() == ".docx" else 1)) * MAX_FILE_BYTES
             raw = f.read(limit + 1)  # 流式截断,不信 st_size(/proc 类虚报)
         if p.suffix.lower() == ".docx":
             if len(raw) > 8 * MAX_FILE_BYTES:
@@ -232,9 +233,9 @@ class Client:
             import base64 as _b64
             import shutil as _shutil
             import subprocess as _sp
-            if len(raw) > 8 * MAX_FILE_BYTES:
-                raise ValueError("PDF 超过 8MB,不支持")
             pdft = _shutil.which("pdftotext")
+            if len(raw) > (32 if pdft else 8) * MAX_FILE_BYTES:
+                raise ValueError("PDF 超过 %dMB,不支持" % (32 if pdft else 8))
             if pdft:
                 r = _sp.run([pdft, "-enc", "UTF-8", str(p), "-"],
                             stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=30)

@@ -362,18 +362,22 @@ def _docx_text(raw):
 
 
 def _pdf_text(p, raw):
-    """PDF→纯文本:优先本机 pdftotext;本机没装就把字节传云端解(用户机器
-    常没有 poppler,云端有)。两路都失败报清楚,不退回二进制乱码。上限 8MB。"""
+    """PDF→纯文本:优先本机 pdftotext(直接解文件路径,论文 PDF 常有 8-30MB,
+    本机解不受传输上限约束,32MB 防呆);本机没装才把字节传云端解(用户机器
+    常没有 poppler,云端有,回退限 8MB)。两路都失败报清楚,不退回二进制乱码。"""
     import base64
     import shutil as _shutil
-    if len(raw) > 8 * MAX_FILE_BYTES:
-        raise ValueError("PDF over 8MB unsupported")
     pdft = _shutil.which("pdftotext")
     if pdft:
+        if len(raw) > 32 * MAX_FILE_BYTES:
+            raise ValueError("PDF over 32MB unsupported")
         r = subprocess.run([pdft, "-enc", "UTF-8", str(p), "-"],
                            stdout=subprocess.PIPE,
-                           stderr=subprocess.DEVNULL, timeout=30)
+                           stderr=subprocess.DEVNULL, timeout=60)
         return r.stdout.decode("utf-8", "replace")[:MAX_FILE_BYTES]
+    if len(raw) > 8 * MAX_FILE_BYTES:
+        raise ValueError("PDF over 8MB unsupported (no local pdftotext;"
+                         " cloud fallback cap)")
     cfg = STATE.get("cfg") or _load_cfg()
     if not cfg:
         raise RuntimeError("no local pdftotext and cloud not configured")
@@ -429,7 +433,8 @@ def _do_op(op):
             with os.fdopen(fd, "rb") as f:
                 if not _fd_under(f.fileno(), base):
                     raise PermissionError("path escapes open dir (post-open check)")
-                limit = (8 if p.suffix.lower() in (".docx", ".pdf") else 1) \
+                limit = (32 if p.suffix.lower() == ".pdf" else
+                         (8 if p.suffix.lower() == ".docx" else 1)) \
                     * MAX_FILE_BYTES
                 raw = f.read(limit + 1)  # 流式截断,不信 st_size
             if p.suffix.lower() == ".docx":

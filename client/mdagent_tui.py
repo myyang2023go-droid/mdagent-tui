@@ -1100,6 +1100,7 @@ _COMMANDS = [
     ("/apikey", "", "change LLM API key (opens provider console)"),
     ("/login", "", "sign in with username/password"),
     ("/mouse", "", "toggle mouse capture (off = native select/copy)"),
+    ("/evolution", "", "open the agent evolution graph in browser"),
     ("/status", "", "bridge status + hourly usage"),
     ("/help", "", "all commands"),
     ("/quit", "", "quit"),
@@ -1727,6 +1728,15 @@ class MdAgentApp(App):
                                  " copy with Shift+drag select")
             except Exception as e:
                 self.add_sys("Mouse toggle failed: %s" % e)
+        elif cmd in ("evolution", "\u8fdb\u5316"):
+            server = (STATE["cfg"] or {}).get("server") or DEFAULT_SERVER
+            url = server.rstrip("/") + "/evolution.html"
+            self.add_sys("Evolution graph: opening %s "
+                         "(paste your mda_ token when asked; kept in page sessionStorage)"
+                         % url)
+            self.add_sys("If the browser didn't open, visit: %s" % url)
+            threading.Thread(target=lambda: webbrowser.open(url),
+                             daemon=True).start()
         elif cmd == "status":
             asyncio.get_event_loop().create_task(self._status_cmd())
         elif cmd == "goal":

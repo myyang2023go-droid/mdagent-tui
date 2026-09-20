@@ -299,6 +299,20 @@ def _read_policy():
         return ""
 
 
+def _alt_scroll(on):
+    """xterm 备用屏滚轮模式(DECSET 1007):鼠标捕获关着时,终端把滚轮
+    转成 ↑↓ 键发给程序——原生框选复制保留的同时滚轮可用。"""
+    seq = "\x1b[?1007h" if on else "\x1b[?1007l"
+    try:
+        if _APP is not None and getattr(_APP, "_driver", None) is not None:
+            _APP._driver.write(seq)
+        else:
+            sys.stdout.write(seq)
+            sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def _gate_available():
     """本机是否有 MD 编排管线(通用门 sudo 权限 + cloud cases 根)。探测一次缓存。
     注: 须全量 `sudo -n -l` 再 grep——`sudo -l <cmd>` 默认按 runas=root 校验,
@@ -937,7 +951,7 @@ class Banner(Static):
             t.append("  " + line + "\n", style="bold #5686FE")
         t.append("  云端 MD 智能体 · 终端工作台\n", style="bold #C9D1E0")
         t.append("  脑子在云端(%s)\n" % server, style="#5F6B7A")
-        t.append("  拖选文字 → Ctrl+C 复制 · 想要滚轮: /mouse · /login 登录\n",
+        t.append("  拖选 → Ctrl+C 复制 · 滚轮/↑↓ 滚动 · PgUp/PgDn 翻页 · /login 登录\n",
                  style="#3A4152")
         t.append("  开放目录 %s · 写/删逐笔批准 · /help 看命令\n" % root,
                  style="#5F6B7A")
@@ -1084,7 +1098,7 @@ _COMMANDS = [
     ("/goal", "", "目标面板:当前任务子目标展开"),
     ("/apikey", "", "换大模型 API Key(自动打开 Kimi 网页登录复制)"),
     ("/login", "", "账号密码登录(token 自动获取,免粘贴)"),
-    ("/mouse", "", "鼠标捕获开关(关=直接框选复制,滚轮点击失效)"),
+    ("/mouse", "", "鼠标捕获开关(默认关=原生框选复制;滚轮靠 1007/PgUpPgDn)"),
     ("/status", "", "桥连接状态 + 每小时用量"),
     ("/help", "", "全部命令"),
     ("/quit", "", "退出"),
@@ -1104,10 +1118,14 @@ class CommandInput(Input):
     def action_cmd_up(self):
         if getattr(self.app, "_cmd_open", False):
             self.app._cmd_move(-1)
+        else:
+            self.app.scroll_chat(-2)
 
     def action_cmd_down(self):
         if getattr(self.app, "_cmd_open", False):
             self.app._cmd_move(1)
+        else:
+            self.app.scroll_chat(2)
 
     def action_cmd_tab(self):
         if getattr(self.app, "_cmd_open", False):
@@ -1277,6 +1295,8 @@ class MdAgentApp(App):
         Binding("ctrl+c", "copy_or_quit", "复制/退出", priority=True),
         Binding("ctrl+q", "quit_app", "退出", priority=True),
         Binding("ctrl+g", "toggle_side", "目标面板"),
+        Binding("pageup", "chat_pageup", "上翻", show=False),
+        Binding("pagedown", "chat_pagedown", "下翻", show=False),
         Binding("y", "approve", show=False),
         Binding("n", "deny", show=False),
     ]
@@ -1326,13 +1346,15 @@ class MdAgentApp(App):
         global _APP
         _APP = self
         self.query_one("#side").display = False   # Claude Code 式:默认无侧栏
-        # 默认关鼠标捕获:开箱即可原生拖选复制(代价滚轮失效,/mouse 可开回)
+        # 默认关鼠标捕获:开箱即可原生拖选复制;同时开 1007 备用屏滚轮,
+        # 终端把滚轮转成 ↑↓ → 菜单关着时滚聊天区(两全)
         try:
             drv = self._driver
             if drv is not None:
                 drv._disable_mouse_support()
         except Exception:
             pass
+        _alt_scroll(True)
         asyncio.get_event_loop().create_task(self._mount(
             Banner(STATE["cfg"]["server"], str(STATE["jail"].root))))
         self.set_interval(0.3, self._check_pending)
@@ -1353,6 +1375,30 @@ class MdAgentApp(App):
         self._spin_i += 1
         if self.busy:
             self.query_one("#status", StatusBar).refresh()
+
+    def on_unmount(self):
+        _alt_scroll(False)
+
+    def scroll_chat(self, lines):
+        """↑↓/滚轮(1007 转键)滚动对话区。"""
+        try:
+            c = self.query_one("#chat", VerticalScroll)
+            if lines:
+                c.scroll_relative(y=lines, animate=False)
+        except Exception:
+            pass
+
+    def action_chat_pageup(self):
+        try:
+            self.query_one("#chat", VerticalScroll).scroll_page_up(animate=False)
+        except Exception:
+            pass
+
+    def action_chat_pagedown(self):
+        try:
+            self.query_one("#chat", VerticalScroll).scroll_page_down(animate=False)
+        except Exception:
+            pass
 
     def action_toggle_side(self):
         side = self.query_one("#side")
@@ -1670,9 +1716,11 @@ class MdAgentApp(App):
                 drv = self._driver
                 if drv is not None and getattr(drv, "_mouse", False):
                     drv._disable_mouse_support()
-                    self.add_sys("鼠标捕获: 关 —— 直接框选 + Ctrl+Shift+C 复制;"
-                                 "滚轮/点击失效。再敲 /mouse 开回")
+                    _alt_scroll(True)
+                    self.add_sys("鼠标捕获: 关 —— 直接框选复制,滚轮经 1007 "
+                                 "仍可滚(终端不支持就 PgUp/PgDn)。再敲 /mouse 切换")
                 elif drv is not None:
+                    _alt_scroll(False)
                     drv._enable_mouse_support()
                     self.add_sys("鼠标捕获: 开 —— 点击/滚轮恢复;"
                                  "复制用 Shift+框选")

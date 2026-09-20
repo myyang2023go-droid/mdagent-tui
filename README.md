@@ -34,6 +34,9 @@ curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main
 2. **登录** —— 选 `1` 账号密码登录(推荐),或选 `2` 贴管理员发的 `mda_` 开头 token
 3. **开放目录** —— 选一个工作目录,云端智能体只能读写这个目录里的文件
 
+推荐向导里选 `1` 直接账号密码登录(token 自动获取,不用粘贴)。
+之后随时 `/login` 重新登录或换账号。
+
 没有账号?在云端首页提交注册申请(自带大模型 API key),获批后即可登录。
 
 ## 安全模型
@@ -50,6 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main
 
 | 命令 | 作用 |
 |---|---|
+| `/login` | **账号密码登录**(token 自动取回,密码不回显;换号/重登都用它) |
 | `/project <名>` | 切会话项目(上下文独立,自动回放云端历史) |
 | `/root <目录>` | 换开放给智能体的本地目录 |
 | `/auto` | 写操作免确认开关 |

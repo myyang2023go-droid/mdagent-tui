@@ -14,6 +14,7 @@
 (100s 未答自动拒)。
 
 命令(输入框里打):
+  /login         账号密码登录(token 自动取回,密码不回显;换号/重登都用它)
   /project <名>  切换会话项目(不同项目上下文独立,切了自动回放云端历史)
   /root <目录>   切换开放给智能体的本地目录
   /auto          写操作免确认开关(默认关,逐笔批准)
@@ -861,7 +862,7 @@ class Banner(Static):
             t.append("  " + line + "\n", style="bold #5686FE")
         t.append("  云端 MD 智能体 · 终端工作台\n", style="bold #C9D1E0")
         t.append("  脑子在云端(%s)\n" % server, style="#5F6B7A")
-        t.append("  开放目录 %s · 写/删逐笔批准 · /help 看命令\n" % root,
+        t.append("  开放目录 %s · 写/删逐笔批准 · /login 登录 · /help 看命令\n" % root,
                  style="#5F6B7A")
         super().__init__(t, classes="banner")
 

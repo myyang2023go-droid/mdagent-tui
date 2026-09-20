@@ -65,8 +65,8 @@ try:
     from textual.containers import Horizontal, Vertical, VerticalScroll
     from textual.widgets import Button, Input, Static
 except ImportError:
-    sys.stderr.write("缺少依赖 textual,先装: pip3 install --user textual\n"
-                     "(装不了就改用纯 REPL 版 mdagent_client.py)\n")
+    sys.stderr.write("Missing dependency textual; install it: pip3 install --user textual\n"
+                     "(or use the zero-dep REPL version mdagent_client.py)\n")
     raise SystemExit(2)
 
 _BUILTIN_SERVER = "https://47.94.209.90/mdagent"
@@ -112,7 +112,7 @@ class _PinnedConn(http.client.HTTPSConnection):
         der = self.sock.getpeercert(binary_form=True)
         fp = ":".join("%02X" % b for b in hashlib.sha256(der).digest())
         if fp != CERT_SHA256:
-            raise ssl.SSLError("云端证书指纹不匹配(可能中间人)!实得 %s…" % fp[:23])
+            raise ssl.SSLError("Server cert fingerprint MISMATCH (possible MITM)! got %s…" % fp[:23])
 
 
 class _PinnedHandler(urllib.request.HTTPSHandler):
@@ -151,7 +151,7 @@ def _save_cfg(server, token, root):
 def _http(method, path, body=None, timeout=70):
     cfg = STATE["cfg"] or _load_cfg()
     if not cfg:
-        raise RuntimeError("云端未配置(删掉 %s 重跑可重新填)" % CONFIG)
+        raise RuntimeError("Cloud not configured (delete %s and rerun to set up)" % CONFIG)
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(cfg["server"] + path, data=data, method=method)
     req.add_header("Content-Type", "application/json")
@@ -183,7 +183,7 @@ PROVIDER_MENU = [
      "https://z.ai/manage/apikey"),
     ("deepseek", "DeepSeek",
      "https://platform.deepseek.com/api_keys"),
-    ("qwen-token-plan-cn", "通义Qwen(阿里百炼)",
+    ("qwen-token-plan-cn", "Qwen Tongyi (Aliyun Bailian)",
      "https://bailian.console.aliyun.com/"),
     ("minimax-cn", "MiniMax",
      "https://platform.minimaxi.com/user-center/basic-information/interface-key"),
@@ -193,19 +193,19 @@ PROVIDER_MENU = [
 def _register_flow(server):
     """终端内注册:收集字段 POST /v1/apply,提交后退出等审批(与网页注册页同接口)。"""
     import getpass
-    print("  注册新账号(与网页注册页 %s/mdagent/register.html 等效):" % server.rstrip("/"))
-    username = input("  用户名(3-16位,小写字母开头): ").strip()
-    password = getpass.getpass("  密码(至少8位,不回显): ")
-    print("  大模型服务(自带 key,对话消耗它):")
+    print("  Register a new account (same as %s/mdagent/register.html):" % server.rstrip("/"))
+    username = input("  Username (3-16 chars, lowercase first): ").strip()
+    password = getpass.getpass("  Password (min 8 chars, hidden): ")
+    print("  LLM provider (bring your own key):")
     for i, (_pid, label, _u) in enumerate(PROVIDER_MENU, 1):
         print("    %d) %s" % (i, label))
-    pv = input("  选 [1]: ").strip() or "1"
+    pv = input("  Select [1]: ").strip() or "1"
     i = int(pv) - 1 if pv.isdigit() else -1
     provider = PROVIDER_MENU[i][0] if 0 <= i < len(PROVIDER_MENU) \
         else "kimi-coding"
-    api_key = getpass.getpass("  API Key(没有可填 8 位以上任意字符,批准后再换): ")
-    contact = input("  联系方式(选填,回车跳过): ").strip()
-    reason = input("  申请理由(选填,回车跳过): ").strip()
+    api_key = getpass.getpass("  API key (any 8+ chars if you don't have one yet): ")
+    contact = input("  Contact (optional, Enter to skip): ").strip()
+    reason = input("  Reason (optional, Enter to skip): ").strip()
     data = json.dumps({"username": username, "password": password,
                        "provider": provider, "api_key": api_key,
                        "contact": contact, "reason": reason}).encode()
@@ -215,10 +215,10 @@ def _register_flow(server):
     try:
         with _OPENER.open(req, timeout=15) as r:
             d = json.loads(r.read().decode("utf-8", "replace"))
-        print("  已提交:%s" % d.get("msg", ""))
-        print("  等管理员批准后,重新运行本程序向导选 1 登录(或 TUI 里 /login)。")
+        print("  Submitted: %s" % d.get("msg", ""))
+        print("  After admin approval, rerun and pick 1 to login (or /login in TUI).")
     except Exception as e:
-        print("  注册失败:%s(未保存任何配置,可重试)" % _err_text(e))
+        print("  Register failed: %s (nothing saved, you can retry)" % _err_text(e))
 
 
 def _verify_token(server, token):
@@ -257,7 +257,7 @@ class Jail:
         try:
             p.relative_to(self.root)
         except ValueError:
-            raise PermissionError("路径越出开放目录: %s" % rel)
+            raise PermissionError("Path escapes the open dir: %s" % rel)
         return p
 
     def fd_in_jail(self, fd):
@@ -344,7 +344,7 @@ def _extra_resolve(pathstr):
     for root in STATE["extra_readable"]:
         if p == root or p.startswith(root + os.sep):
             return p, root
-    raise PermissionError("路径越出开放目录: %s" % pathstr)
+    raise PermissionError("Path escapes the open dir: %s" % pathstr)
 
 
 def _docx_text(raw):
@@ -375,7 +375,7 @@ def _do_op(op):
     args = op.get("args") or {}
     with STATE["lock"]:
         if oid in STATE["seen"]:
-            return {"op_id": oid, "ok": False, "error": "重复 op,已忽略(防重放)"}
+            return {"op_id": oid, "ok": False, "error": "duplicate op, ignored (anti-replay)"}
         STATE["seen"][oid] = None
         while len(STATE["seen"]) > 500:
             STATE["seen"].popitem(last=False)
@@ -388,7 +388,7 @@ def _do_op(op):
                 d, _ = _extra_resolve(args.get("path") or ".")
                 d = Path(d)
             if not d.is_dir():
-                raise FileNotFoundError("目录不存在: %s" % args.get("path"))
+                raise FileNotFoundError("dir not found: %s" % args.get("path"))
             data = {"entries": sorted("%s%s" % (p.name, "/" if p.is_dir() else "")
                                       for p in d.iterdir())[:500]}
         elif name == "read":
@@ -399,23 +399,23 @@ def _do_op(op):
                 ep, base = _extra_resolve(args.get("path") or "")
                 p = Path(ep)
             if not p.is_file():
-                raise FileNotFoundError("文件不存在: %s" % args.get("path"))
+                raise FileNotFoundError("file not found: %s" % args.get("path"))
             fd = os.open(str(p), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             with os.fdopen(fd, "rb") as f:
                 if not _fd_under(f.fileno(), base):
-                    raise PermissionError("路径越出开放目录(打开后回验)")
+                    raise PermissionError("path escapes open dir (post-open check)")
                 limit = (8 if p.suffix.lower() == ".docx" else 1) * MAX_FILE_BYTES
                 raw = f.read(limit + 1)  # 流式截断,不信 st_size
             if p.suffix.lower() == ".docx":
                 if len(raw) > 8 * MAX_FILE_BYTES:
-                    raise ValueError("docx 超过 8MB,不支持")
+                    raise ValueError("docx over 8MB unsupported")
                 content = _docx_text(raw)[:MAX_FILE_BYTES]
             elif p.suffix.lower() == ".pdf":
                 import shutil as _shutil
                 pdft = _shutil.which("pdftotext")
                 if not pdft:
                     if len(raw) > MAX_FILE_BYTES:
-                        raise ValueError("文件超过 1MB,不支持(本机无 pdftotext)")
+                        raise ValueError("file over 1MB unsupported (no local pdftotext)")
                     content = raw.decode("utf-8", errors="replace")
                 r = subprocess.run([pdft, "-enc", "UTF-8", str(p), "-"],
                                    stdout=subprocess.PIPE,
@@ -423,7 +423,7 @@ def _do_op(op):
                 content = r.stdout.decode("utf-8", "replace")[:MAX_FILE_BYTES]
             else:
                 if len(raw) > MAX_FILE_BYTES:
-                    raise ValueError("文件超过 1MB,不支持")
+                    raise ValueError("file over 1MB unsupported")
                 content = raw.decode("utf-8", errors="replace")
             try:
                 disp = str(p.relative_to(jail.root))
@@ -447,7 +447,7 @@ def _do_op(op):
         elif name == "exec":
             data = _do_exec(oid, args)
         else:
-            return {"op_id": oid, "ok": False, "error": "未知操作 " + str(name)}
+            return {"op_id": oid, "ok": False, "error": "unknown op " + str(name)}
         return {"op_id": oid, "ok": True, "data": data}
     except Exception as ex:
         return {"op_id": oid, "ok": False, "error": str(ex)}
@@ -482,7 +482,7 @@ def _do_glob(args):
     jail = STATE["jail"]
     pat = str(args.get("pattern") or "").strip()
     if not pat:
-        raise ValueError("pattern 不能为空")
+        raise ValueError("pattern must not be empty")
     sub = jail.resolve(args.get("path") or ".")
     hits = []
     for p in _glob.glob(pat, root_dir=str(sub), recursive=True):
@@ -533,31 +533,31 @@ def _do_edit(oid, args):
     """精确改一处:old 须唯一,批准卡带前后对比。对齐 Claude Code Edit 语义。"""
     old, new = args.get("old"), args.get("new")
     if not isinstance(old, str) or not old:
-        raise ValueError("old 不能为空")
+        raise ValueError("old must not be empty")
     if not isinstance(new, str):
-        raise ValueError("new 缺失")
+        raise ValueError("new missing")
     jail = STATE["jail"]
     p = jail.resolve(args.get("path") or "")
     if not p.is_file():
-        raise FileNotFoundError("文件不存在: %s" % args.get("path"))
+        raise FileNotFoundError("file not found: %s" % args.get("path"))
     fd = os.open(str(p), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     with os.fdopen(fd, "rb") as f:
         if not _fd_under(f.fileno(), jail.root):
-            raise PermissionError("路径越出开放目录(打开后回验)")
+            raise PermissionError("path escapes open dir (post-open check)")
         raw = f.read(MAX_FILE_BYTES + 1)
     if len(raw) > MAX_FILE_BYTES:
-        raise ValueError("文件超过 1MB,不支持")
+        raise ValueError("file over 1MB unsupported")
     content = raw.decode("utf-8", errors="replace")
     n = content.count(old)
     if n == 0:
-        raise ValueError("old 在文件中未找到(未做任何修改)")
+        raise ValueError("old not found in file (nothing changed)")
     if n > 1:
-        raise ValueError("old 出现 %d 次,不唯一,拒绝盲改(带更多上下文再试)" % n)
+        raise ValueError("old appears %d times, not unique; include more context and retry" % n)
     new_content = content.replace(old, new, 1)
     nb = len(new_content.encode("utf-8"))
     i = content.find(old)
     a = max(0, i - 60)
-    preview = ("修改 %s\n- %s\n+ %s" % (
+    preview = ("edit %s\n- %s\n+ %s" % (
         p, old[:120].replace("\n", "\\n"), new[:120].replace("\n", "\\n")))
     req = {"path": str(p), "bytes": nb, "preview": preview, "kind": "edit",
            "event": threading.Event(), "decision": None, "ts": time.time()}
@@ -570,14 +570,14 @@ def _do_edit(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("用户拒绝了这次修改(或 100s 内未批准)")
+            raise PermissionError("user denied this edit (or 100s approval timeout)")
         fd = os.open(str(p), os.O_WRONLY | os.O_CREAT, 0o644)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             if not _fd_under(f.fileno(), jail.root):
-                raise PermissionError("路径越出开放目录(打开后回验)")
+                raise PermissionError("path escapes open dir (post-open check)")
             f.truncate(0)
             f.write(new_content)
-        _sys("已修改: %s" % p)
+        _sys("edited: %s" % p)
         return {"edited": str(p.relative_to(jail.root)), "bytes": nb}
     finally:
         with STATE["lock"]:
@@ -588,10 +588,10 @@ def _do_write(oid, args):
     content = str(args.get("content", ""))
     nb = len(content.encode("utf-8"))
     if nb > MAX_FILE_BYTES:
-        raise ValueError("内容超过 1MB,不支持")
+        raise ValueError("content over 1MB unsupported")
     p = STATE["jail"].resolve(args.get("path") or "")
     if len(content) > 300:
-        preview = "%s\n……(中间省略 %d 字)……\n%s" % (
+        preview = "%s\n...(%d chars omitted)...\n%s" % (
             content[:200], len(content) - 300, content[-100:])
     else:
         preview = content
@@ -606,15 +606,15 @@ def _do_write(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("用户拒绝了这次写入(或 100s 内未批准)")
+            raise PermissionError("user denied this write (or 100s approval timeout)")
         p.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(p), os.O_WRONLY | os.O_CREAT, 0o644)  # 回验后再 truncate
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             if not STATE["jail"].fd_in_jail(f.fileno()):
-                raise PermissionError("路径越出开放目录(打开后回验)")
+                raise PermissionError("path escapes open dir (post-open check)")
             f.truncate(0)
             f.write(content)
-        _sys("已写入: %s (%d 字节)" % (p, nb))
+        _sys("wrote: %s (%d bytes)" % (p, nb))
         return {"written": str(p.relative_to(STATE["jail"].root)), "bytes": nb}
     finally:
         with STATE["lock"]:
@@ -625,21 +625,21 @@ def _do_delete(oid, args):
     """删除文件/空目录。不可恢复,永远逐笔批准(不吃 /auto 免确认)。"""
     p = STATE["jail"].resolve(args.get("path") or "")
     if not p.exists() and not p.is_symlink():
-        raise FileNotFoundError("不存在: %s" % args.get("path"))
+        raise FileNotFoundError("not found: %s" % args.get("path"))
     if p.is_dir() and not p.is_symlink():
         if any(p.iterdir()):
-            raise ValueError("目录非空,不支持递归删除: %s" % args.get("path"))
-        nb, preview = 0, "(空目录)"
+            raise ValueError("dir not empty, recursive delete unsupported: %s" % args.get("path"))
+        nb, preview = 0, "(empty dir)"
     else:
         nb = p.stat().st_size
-        preview = "文件 %d 字节" % nb
+        preview = "file %d bytes" % nb
         if nb and nb <= MAX_FILE_BYTES and p.is_file():
             fd = os.open(str(p), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             with os.fdopen(fd, "rb") as f:
                 if not STATE["jail"].fd_in_jail(f.fileno()):
-                    raise PermissionError("路径越出开放目录(打开后回验)")
+                    raise PermissionError("path escapes open dir (post-open check)")
                 head = f.read(200).decode("utf-8", errors="replace")
-            preview = "文件 %d 字节,开头:\n%s" % (nb, head)
+            preview = "file %d bytes, head:\n%s" % (nb, head)
     req = {"path": str(p), "bytes": nb, "preview": preview, "kind": "delete",
            "event": threading.Event(), "decision": None, "ts": time.time()}
     with STATE["lock"]:
@@ -647,12 +647,12 @@ def _do_delete(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("用户拒绝了这次删除(或 100s 内未批准)")
+            raise PermissionError("user denied this delete (or 100s approval timeout)")
         if p.is_dir() and not p.is_symlink():
             p.rmdir()
         else:
             p.unlink()
-        _sys("已删除: %s" % p)
+        _sys("deleted: %s" % p)
         return {"deleted": str(p.relative_to(STATE["jail"].root))}
     finally:
         with STATE["lock"]:
@@ -676,9 +676,9 @@ _MD_ENGINE_RE = re.compile(
 def _reject_wild_md(cmd):
     """命中引擎且未上轨 → 返回拒绝理由;未命中返回 None。"""
     if _MD_ENGINE_RE.search(cmd):
-        return ("绝不野跑:检测到 MD 引擎命令(lmp/gmx/mdrun 等),必须带 "
-                "supervise:true 经编排管线上轨发车(重跑/补跑/短测同样);"
-                "被拒即停,不要绕道直跑")
+        return ("No wild runs: MD engine command (lmp/gmx/mdrun...) detected;"
+                " must go through the supervised pipeline with supervise:true"
+                " (reruns/short tests included). Stop when rejected; no bypass")
     return None
 
 
@@ -702,8 +702,8 @@ def _reject_wild_md_in_script(cmd):
                 continue
             why = _reject_wild_md(line)
             if why:
-                return ("绝不野跑:脚本 %s 内含 MD 引擎命令;MD 一律 "
-                        "supervise:true 上轨发车,不许拆进脚本绕过" % name)
+                return ("No wild runs: script %s contains an MD engine command; MD must"
+                        " always run supervised with supervise:true" % name)
     return None
 
 
@@ -714,12 +714,13 @@ def _do_exec(oid, args):
     supervise:true 且本机有 MD 管线时走上轨发车(_do_exec_gate)。"""
     cmd = str(args.get("cmd") or "").strip()
     if not cmd:
-        raise ValueError("cmd 不能为空")
+        raise ValueError("cmd must not be empty")
     if args.get("supervise"):
         if not _gate_available():
             raise PermissionError(
-                "绝不野跑:supervise 上轨需要本机 MD 编排管线(mdrun_gate),"
-                "本机不可用,已拒绝直跑(装好管线或换有管线的机器再发)")
+                "No wild runs: supervise needs the local MD pipeline (mdrun_gate),"
+                " unavailable here; direct run refused (install it or use a"
+                " machine that has it)")
         return _do_exec_gate(oid, args, cmd)
     why = _reject_wild_md(cmd) or _reject_wild_md_in_script(cmd)
     if why:
@@ -736,7 +737,7 @@ def _do_exec_direct(oid, args, cmd):
     (jail.root / ".mdagent_run").mkdir(exist_ok=True)
     log_rel = ".mdagent_run/%s.log" % oid[:12]
     req = {"path": cmd, "bytes": 0,
-           "preview": "工作目录: %s\n超时上限: %d 秒\n日志: %s" % (jail.root, timeout_s, log_rel),
+           "preview": "workdir: %s\ntimeout: %ds\nlog: %s" % (jail.root, timeout_s, log_rel),
            "kind": "exec", "event": threading.Event(), "decision": None,
            "ts": time.time()}
     if STATE["auto"]:
@@ -748,7 +749,7 @@ def _do_exec_direct(oid, args, cmd):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("用户拒绝了这次命令执行(或 100s 内未批准)")
+            raise PermissionError("user denied this exec (or 100s approval timeout)")
         lf = open(jail.root / log_rel, "w", encoding="utf-8")
         lf.write("$ %s\n\n" % cmd)
         lf.flush()
@@ -757,7 +758,7 @@ def _do_exec_direct(oid, args, cmd):
                                 start_new_session=True)
         threading.Thread(target=_watch_exec, args=(proc, lf, timeout_s),
                          daemon=True).start()
-        _sys("已启动: %s (pid %d,日志 %s)" % (cmd[:60], proc.pid, log_rel))
+        _sys("started: %s (pid %d, log %s)" % (cmd[:60], proc.pid, log_rel))
         return {"run_id": oid[:12], "pid": proc.pid, "log": log_rel,
                 "status": "running", "via": "direct"}
     finally:
@@ -771,12 +772,12 @@ def _do_exec_gate(oid, args, cmd):
     看护观察窗); 成功后 case 目录动态加入只读放行, 云端可读日志跟进。"""
     m = re.search(r"(?:^|\s)-in\s+(\S+)", cmd)
     if not m:
-        raise ValueError("supervise 发车需要 cmd 形如 `lmp -in 输入文件`"
-                         "(命令里未找到 -in)")
+        raise ValueError("supervise needs cmd like `lmp -in input.file`"
+                         "(no -in found in cmd)")
     jail = STATE["jail"]
     in_path = jail.resolve(m.group(1))
     if not in_path.is_file():
-        raise FileNotFoundError("lammps 输入不存在: %s" % m.group(1))
+        raise FileNotFoundError("lammps input not found: %s" % m.group(1))
     content = in_path.read_text(encoding="utf-8", errors="replace")
     extra = {}
     refs = re.findall(r"^\s*read_(?:data|restart)\s+(\S+)", content, re.M)
@@ -804,9 +805,9 @@ def _do_exec_gate(oid, args, cmd):
     case_id = "%s-%s" % (case_slug, oid[:8])
     prod_dir = os.path.join(CLOUD_CASES, proj_slug, case_id)
     req = {"path": cmd, "bytes": 0,
-           "preview": ("看护发车(上轨):\n算例: %s\n产物目录: %s\n"
-                       "输入文件: %s(%d 字节) + %d 个数据文件\n"
-                       "批准后由编排管线看护(崩溃自愈/看板)")
+           "preview": ("supervised launch:\ncase: %s\nprod dir: %s\n"
+                       "input: %s (%d bytes) + %d data files\n"
+                       "after approval the pipeline supervises (auto-recover/dashboard)")
            % (case_id, prod_dir, m.group(1), len(content), len(extra)),
            "kind": "exec", "event": threading.Event(), "decision": None,
            "ts": time.time()}
@@ -819,7 +820,7 @@ def _do_exec_gate(oid, args, cmd):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("用户拒绝了这次命令执行(或 100s 内未批准)")
+            raise PermissionError("user denied this exec (or 100s approval timeout)")
         # op id 净化:云端字符串不当文件名成分(复审 P2-7)
         safe_oid = re.sub(r"[^A-Za-z0-9_-]", "x", oid[:12]) or "op"
         req_p = "/tmp/mdrun_req_%s.json" % safe_oid
@@ -836,18 +837,18 @@ def _do_exec_gate(oid, args, cmd):
             with open(res_p, encoding="utf-8") as f:
                 res = json.load(f)
         except Exception:
-            raise RuntimeError("门未返回结果(rc=%s): %s"
+            raise RuntimeError("gate returned nothing (rc=%s): %s"
                                % (r.returncode, (r.stderr or "")[-200:]))
         if not res.get("success"):
-            raise RuntimeError("编排门拒绝发车: %s" % res.get("error"))
+            raise RuntimeError("pipeline gate refused: %s" % res.get("error"))
         real_pd = os.path.realpath(res["prod_dir"])
         STATE["extra_readable"].add(real_pd)
-        board = "已进看板(cloud-client)"
+        board = "on dashboard (cloud-client)"
         if res.get("adopt_queued"):
-            board += ",已排编排器收养队列"
+            board += ", queued for adopter"
         elif res.get("completed"):
-            board += "(算例瞬完,无需看护)"
-        _sys("上轨发车: %s → %s" % (case_id, real_pd))
+            board += "(finished instantly, no supervision needed)"
+        _sys("supervised launch: %s → %s" % (case_id, real_pd))
         return {"run_id": oid[:12], "via": "gate",
                 "case_id": res["case_id"], "prod_dir": real_pd,
                 "pids": res.get("pids", []),
@@ -864,16 +865,16 @@ def _watch_exec(proc, lf, timeout_s):
     """盯子进程:正常结束写退出码;超时杀整个进程组(模拟常会 fork 子进程)。"""
     try:
         rc = proc.wait(timeout=timeout_s)
-        lf.write("\n[退出码 %d]\n" % rc)
+        lf.write("\n[exit code %d]\n" % rc)
     except subprocess.TimeoutExpired:
-        lf.write("\n[超时 %d 秒,已强杀]\n" % timeout_s)
+        lf.write("\n[timeout %ds, killed]\n" % timeout_s)
         try:
             os.killpg(proc.pid, 9)
         except Exception:
             pass
         proc.wait()
     except Exception as ex:
-        lf.write("\n[监视异常: %s]\n" % ex)
+        lf.write("\n[watch error: %s]\n" % ex)
     finally:
         lf.close()
 
@@ -949,11 +950,11 @@ class Banner(Static):
         t = Text()
         for line in _LOGO:
             t.append("  " + line + "\n", style="bold #5686FE")
-        t.append("  云端 MD 智能体 · 终端工作台\n", style="bold #C9D1E0")
-        t.append("  脑子在云端(%s)\n" % server, style="#5F6B7A")
-        t.append("  拖选 → Ctrl+C 复制 · 滚轮/↑↓ 滚动 · PgUp/PgDn 翻页 · /login 登录\n",
+        t.append("  MD Agent · Terminal Workbench\n", style="bold #C9D1E0")
+        t.append("  Brain in the cloud (%s)\n" % server, style="#5F6B7A")
+        t.append("  Drag-select then Ctrl+C to copy · Wheel/arrows to scroll · /login to sign in\n",
                  style="#3A4152")
-        t.append("  开放目录 %s · 写/删逐笔批准 · /help 看命令\n" % root,
+        t.append("  Open dir %s · every write/delete needs approval · /help for commands\n" % root,
                  style="#5F6B7A")
         super().__init__(t, classes="banner")
 
@@ -997,7 +998,7 @@ class OpLine(Static):
         t.append(" " + path, style="#5F6B7A")
         t.append("  " + time.strftime("%H:%M"), style="#3A4152")
         if not ok:
-            t.append("  ✗ " + str(op.get("_err") or "被拒绝/失败"),
+            t.append("  ✗ " + str(op.get("_err") or "rejected/failed"),
                      style="#F85149")
         super().__init__(t, classes="opline")
 
@@ -1065,7 +1066,7 @@ class StreamCard(Vertical):
             col = Collapsible(
                 Static(Text(self._thinking_seen[-8000:],
                             style="italic #5F6B7A")),
-                title="✶ 思考过程(%d 字,点开看全文)" % len(self._thinking_seen),
+                title="✶ Thinking (%d chars, expand for full)" % len(self._thinking_seen),
                 collapsed=True)
             self.mount(col, before=self.body)
         else:
@@ -1088,20 +1089,20 @@ class ApprovalCard(Horizontal):
 
 # (命令, 参数, 说明) —— / 菜单与 /help 共用的唯一事实源
 _COMMANDS = [
-    ("/project", "<名>", "换会话项目(上下文独立,自动回放云端历史)"),
-    ("/resume", "[序号]", "挑旧项目续做(按最近活跃排序,历史自动回放)"),
-    ("/policy", "", "查看/重载本地策略 mdagent.md"),
-    ("/archive", "[名]", "归档项目(会话+项目空间收进云端归档区,缺省=当前)"),
-    ("/restore", "<名>", "恢复最近一次归档的项目"),
-    ("/root", "<目录>", "换开放给智能体的本地目录"),
-    ("/auto", "", "写操作免确认开关(默认关,逐笔批准)"),
-    ("/goal", "", "目标面板:当前任务子目标展开"),
-    ("/apikey", "", "换大模型 API Key(自动打开 Kimi 网页登录复制)"),
-    ("/login", "", "账号密码登录(token 自动获取,免粘贴)"),
-    ("/mouse", "", "鼠标捕获开关(默认关=原生框选复制;滚轮靠 1007/PgUpPgDn)"),
-    ("/status", "", "桥连接状态 + 每小时用量"),
-    ("/help", "", "全部命令"),
-    ("/quit", "", "退出"),
+    ("/project", "<name>", "switch project (own context, history replayed)"),
+    ("/resume", "[n]", "resume a past project (by recent activity)"),
+    ("/policy", "", "show/reload local policy mdagent.md"),
+    ("/archive", "[name]", "archive project (default = current)"),
+    ("/restore", "<name>", "restore the last archived project"),
+    ("/root", "<dir>", "change the local open directory"),
+    ("/auto", "", "toggle write auto-approve (default off)"),
+    ("/goal", "", "goal panel: current task sub-goals"),
+    ("/apikey", "", "change LLM API key (opens provider console)"),
+    ("/login", "", "sign in with username/password"),
+    ("/mouse", "", "toggle mouse capture (off = native select/copy)"),
+    ("/status", "", "bridge status + hourly usage"),
+    ("/help", "", "all commands"),
+    ("/quit", "", "quit"),
 ]
 
 
@@ -1140,7 +1141,7 @@ class CommandInput(Input):
             self.app.action_interrupt()   # ESC = 打断当前任务(Claude Code 同款)
 
 
-_GOAL_HINT = "当前项目没有进行中的目标\n(多步任务智能体会自动在工作目录建 GOAL.md)"
+_GOAL_HINT = "No active goal in this project\n(the agent writes GOAL.md in the work dir for multi-step tasks)"
 
 
 def _render_goal(content):
@@ -1148,7 +1149,7 @@ def _render_goal(content):
     title, subs = "", []
     for line in content.splitlines():
         line = line.strip()
-        m = re.match(r"^#\s*目标[:：]\s*(.+)$", line)
+        m = re.match(r"^#\s*(目标|Goal|GOAL)[:：]\s*(.+)$", line)
         if m and not title:
             title = m.group(1).strip()
             continue
@@ -1157,7 +1158,7 @@ def _render_goal(content):
             subs.append((m.group(1).lower(), m.group(2).strip()))
     t = Text()
     if not title and not subs:
-        t.append(content[:400] or "(空)", style="#97A0B0")
+        t.append(content[:400] or "", style="#97A0B0")
         return t
     if title:
         t.append("🎯 " + title + "\n\n", style="bold #EAF0FB")
@@ -1178,7 +1179,7 @@ def _render_goal(content):
 class GoalPanel(Static):
     def __init__(self):
         super().__init__(Text(_GOAL_HINT, style="#5F6B7A"), id="goal")
-        self.border_title = "🎯 目标"
+        self.border_title = "🎯 Goals"
 
     def show(self, content):
         self.update(_render_goal(content))
@@ -1189,8 +1190,8 @@ class GoalPanel(Static):
 
 class OpsPanel(Static):
     def __init__(self):
-        super().__init__(Text("还没有文件操作", style="#5F6B7A"), id="ops")
-        self.border_title = "📁 文件操作"
+        super().__init__(Text("No file ops yet", style="#5F6B7A"), id="ops")
+        self.border_title = "📁 File ops"
         self.lines = collections.deque(maxlen=60)
 
     def add(self, line, ok):
@@ -1211,11 +1212,11 @@ class StatusBar(Static):
         if getattr(app, "busy", False):
             frame = _SPIN[getattr(app, "_spin_i", 0) % len(_SPIN)]
             t.append(" %s " % frame, style="#D29922")
-            t.append(app.phase or "思考中…", style="#D29922")
+            t.append(app.phase or "Thinking…", style="#D29922")
             t.append("  ·  ", style="#3A4152")
         else:
             t.append(" ● ", style="#3FB950" if online else "#F85149")
-            t.append("在线" if online else "离线", style="#97A0B0")
+            t.append("online" if online else "offline", style="#97A0B0")
             t.append("  ·  ", style="#3A4152")
         t.append("⛁ %s" % _PROJECT, style="#5686FE")
         t.append("  ·  ", style="#3A4152")
@@ -1223,15 +1224,15 @@ class StatusBar(Static):
                  style="#5F6B7A")
         u = getattr(app, "usage", None) or {}
         lim = u.get("limit_per_hour") or 0
-        t.append("  ·  用量 %s%s" % (u.get("chats_24h", "?"),
-                                      "/%s·时" % lim if lim else " ·不限"),
+        t.append("  ·  chats %s%s" % (u.get("chats_24h", "?"),
+                                      "/%s per hour" % lim if lim else " · unlimited"),
                  style="#5F6B7A")
         gs = getattr(app, "goal_summary", None)
         if gs:
             t.append("  ·  🎯 %d/%d" % gs, style="#5686FE")
         if STATE["auto"]:
-            t.append("  ·  ⚠自动审批开", style="#D29922")
-        t.append("  ·  Ctrl+G 目标面板", style="#3A4152")
+            t.append("  ·  ⚠ auto-approve ON", style="#D29922")
+        t.append("  ·  Ctrl+G goals", style="#3A4152")
         return t
 
 
@@ -1247,7 +1248,7 @@ class MdAgentApp(App):
             try:
                 subprocess.run([xclip, "-selection", "clipboard"],
                                input=text.encode(), timeout=3, check=True)
-                self.notify("已复制 %d 字" % len(text))
+                self.notify("Copied %d chars" % len(text))
                 return
             except Exception:
                 pass
@@ -1292,11 +1293,11 @@ class MdAgentApp(App):
     #btn-no { background: #3A2028; }
     """
     BINDINGS = [
-        Binding("ctrl+c", "copy_or_quit", "复制/退出", priority=True),
-        Binding("ctrl+q", "quit_app", "退出", priority=True),
-        Binding("ctrl+g", "toggle_side", "目标面板"),
-        Binding("pageup", "chat_pageup", "上翻", show=False),
-        Binding("pagedown", "chat_pagedown", "下翻", show=False),
+        Binding("ctrl+c", "copy_or_quit", "copy/quit", priority=True),
+        Binding("ctrl+q", "quit_app", "quit", priority=True),
+        Binding("ctrl+g", "toggle_side", "goals"),
+        Binding("pageup", "chat_pageup", "page up", show=False),
+        Binding("pagedown", "chat_pagedown", "page down", show=False),
         Binding("y", "approve", show=False),
         Binding("n", "deny", show=False),
     ]
@@ -1337,8 +1338,8 @@ class MdAgentApp(App):
                 yield OpsPanel()
         yield Vertical(id="approval-slot")
         yield Static(id="cmd-menu")
-        yield CommandInput(placeholder="输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · "
-                                       "拖选后 Ctrl+C 复制 · Ctrl+G 目标",
+        yield CommandInput(placeholder="Message · / command menu · Paste Ctrl+Shift+V · "
+                                       "select+Ctrl+C copy · Ctrl+G goals",
                            id="composer")
         yield StatusBar(id="status")
 
@@ -1364,11 +1365,11 @@ class MdAgentApp(App):
         asyncio.get_event_loop().create_task(self._load_history(_PROJECT))
         STATE["policy"] = _read_policy()
         if STATE["policy"]:
-            self.add_sys("本地策略已加载: mdagent.md(%d 字,每轮自动附带,"
-                         "不进对话历史;/policy 查看)" % len(STATE["policy"]))
+            self.add_sys("Local policy loaded: mdagent.md (%d chars, attached every turn,"
+                         " never stored in chat history; /policy to view)" % len(STATE["policy"]))
         else:
-            self.add_sys("提示: 在开放目录放一个 mdagent.md(同 Claude Code 的 "
-                         "CLAUDE.md)可固化你的规矩,每轮自动生效。")
+            self.add_sys("Tip: put a mdagent.md in the open dir (like Claude Code's "
+                         "CLAUDE.md) to pin your rules, applied every turn.")
         self.query_one("#composer", Input).focus()
 
     def _spin(self):
@@ -1540,7 +1541,7 @@ class MdAgentApp(App):
             self._command(text)
             return
         if self.busy:
-            self.add_sys("上一个任务还在跑,等它完成…")
+            self.add_sys("A task is still running, wait for it… (ESC to interrupt)")
             return
         self.add_user(text)
         asyncio.get_event_loop().create_task(self._send(text))
@@ -1549,7 +1550,7 @@ class MdAgentApp(App):
     async def _send(self, text):
         loop = asyncio.get_event_loop()
         self.busy = True
-        self.phase = "提交中…"
+        self.phase = "Submitting…"
         card = StreamCard()
         await self._mount(card)
         card.set_text("…", streaming=True)
@@ -1561,13 +1562,13 @@ class MdAgentApp(App):
                  "policy": STATE.get("policy") or ""}, 20))
         except Exception as e:
             self._stream_end()
-            self.add_sys("提交失败: %s" % _err_text(e))
+            self.add_sys("Submit failed: %s" % _err_text(e))
             return
         jid = r.get("job_id")
         self._job_id = jid
         if not jid:
             self._stream_end()
-            self.add_sys("提交失败: %s" % r)
+            self.add_sys("Submit failed: %s" % r)
             return
         while True:
             await asyncio.sleep(1.0)
@@ -1576,16 +1577,16 @@ class MdAgentApp(App):
                     _http, "GET", "/v1/jobs/" + jid, None, 15))
             except Exception as e:
                 self._stream_end()
-                self.add_sys("查询失败: %s" % _err_text(e))
+                self.add_sys("Poll failed: %s" % _err_text(e))
                 return
             st = j.get("status")
             if st == "done":
-                reply = j.get("reply") or "(空回复)"
+                reply = j.get("reply") or "(empty reply)"
                 self._stream_end(reply)
                 return
             if st == "error":
                 self._stream_end()
-                self.add_sys("云端出错: %s" % (j.get("error") or "?"))
+                self.add_sys("Cloud error: %s" % (j.get("error") or "?"))
                 return
             if self.stream_card is not None:
                 thinking = j.get("thinking") or ""
@@ -1597,7 +1598,7 @@ class MdAgentApp(App):
                 if thinking or partial:
                     self.query_one("#chat", VerticalScroll).scroll_end(
                         animate=False)
-            self.phase = j.get("activity") or "思考中(%s)…" % st
+            self.phase = j.get("activity") or "Working (%s)…" % st
 
     def _stream_end(self, final=None):
         if self.stream_card is not None:
@@ -1621,19 +1622,19 @@ class MdAgentApp(App):
                 "/v1/conversations/" + urllib.parse.quote(project, safe="")
                 + "?turns=50", None, 15))
         except Exception as e:
-            self.add_sys("历史回放失败: %s" % _err_text(e))
+            self.add_sys("History replay failed: %s" % _err_text(e))
             return
         turns = d.get("turns") or []
         if turns:
-            self.add_sys("—— 项目「%s」云端历史 %d 条 ——" % (project, len(turns)))
+            self.add_sys("—— project '%s': %d turns of cloud history ——" % (project, len(turns)))
             for t in turns:
                 if t.get("role") == "user":
                     self.add_user(t.get("text", ""))
                 elif t.get("role") == "assistant":
                     self.add_agent(t.get("text", ""))
         else:
-            self.add_sys("项目「%s」还没有历史。对话/记忆/进化都在云端你的独立空间;"
-                         "本地文件写入逐笔批准。" % project)
+            self.add_sys("Project '%s' has no history yet. Chat/memory/evolution live in your"
+                         " private cloud space; local writes need approval." % project)
 
     # ---- 命令 ----
     def _command(self, line):
@@ -1645,69 +1646,69 @@ class MdAgentApp(App):
             self.exit()
         elif cmd == "root":
             if not arg:
-                self.add_sys("用法: /root <目录>")
+                self.add_sys("Usage: /root <dir>")
                 return
             try:
                 j = Jail(arg)
             except Exception as e:
-                self.add_sys("切换失败: %s" % e)
+                self.add_sys("Switch failed: %s" % e)
                 return
             STATE["jail"] = j
             cfg = STATE["cfg"]
             if cfg:
                 _save_cfg(cfg["server"], cfg["token"], str(j.root))
                 cfg["root"] = str(j.root)
-            self.add_sys("开放目录已切换: %s" % j.root)
+            self.add_sys("Open dir switched: %s" % j.root)
             STATE["policy"] = _read_policy()
-            self.add_sys("本地策略 mdagent.md: %s" % (
-                "已加载 %d 字" % len(STATE["policy"]) if STATE["policy"]
-                else "此目录没有(放一个即可自动生效)"))
+            self.add_sys("Local policy mdagent.md: %s" % (
+                "%d chars loaded" % len(STATE["policy"]) if STATE["policy"]
+                else "none in this dir (drop one in to enable)"))
             if j.root.parent == j.root or j.root == Path.home():
-                self.add_sys("!! 警告: 开放的是整盘/家目录,其中文件可被远程读取,"
-                             "写入仍需逐笔批准;建议只开放项目目录")
+                self.add_sys("!! WARNING: you opened the whole disk/home dir; files in it can be"
+                             " read remotely. Better open a project dir only")
         elif cmd == "project":
             if not arg:
-                self.add_sys("用法: /project <名>")
+                self.add_sys("Usage: /project <name>")
                 return
             _PROJECT = arg
-            self.add_sys("会话项目: %s(上下文独立),回放云端历史…" % arg)
+            self.add_sys("Project: %s (own context), replaying cloud history…" % arg)
             asyncio.get_event_loop().create_task(self._load_history(arg))
         elif cmd == "archive":
             target = arg or _PROJECT
             asyncio.get_event_loop().create_task(self._archive_cmd(target))
         elif cmd == "restore":
             if not arg:
-                self.add_sys("用法: /restore <项目名>")
+                self.add_sys("Usage: /restore <project>")
                 return
             asyncio.get_event_loop().create_task(self._restore_cmd(arg))
         elif cmd == "auto":
             if STATE["auto"]:
                 STATE["auto"] = False
-                self.add_sys("写操作免确认: 关")
+                self.add_sys("Write auto-approve: OFF")
             else:
                 self.confirm = "auto_on"
-                self.add_sys("开启后写文件不再逐笔询问(仍限开放目录内)。"
-                             "确认请在输入框输入 yes,其它取消")
+                self.add_sys("Turn on to skip per-write approval (still jailed to the open dir)."
+                             "Type yes to confirm, anything else cancels")
         elif cmd == "resume":
             asyncio.get_event_loop().create_task(self._resume_cmd(arg))
         elif cmd == "policy":
             STATE["policy"] = _read_policy()
             if STATE["policy"]:
-                self.add_sys("mdagent.md(%s)共 %d 字,每轮自动附带。前 600 字:\n%s"
+                self.add_sys("mdagent.md (%s) %d chars total, attached every turn. First 600 chars:\n%s"
                              % (STATE["jail"].root / "mdagent.md",
                                 len(STATE["policy"]), STATE["policy"][:600]))
             else:
-                self.add_sys("开放目录没有 mdagent.md,建一个即自动生效: %s"
+                self.add_sys("No mdagent.md in the open dir; create one to enable: %s"
                              % (STATE["jail"].root / "mdagent.md"))
         elif cmd == "login":
             self.login = {"step": "user"}
             inp = self.query_one("#composer", Input)
             inp.password = False
-            inp.placeholder = "用户名(直接回车取消 /login)"
-            self.add_sys("登录:输入用户名(直接回车取消)")
+            inp.placeholder = "Username (empty Enter cancels /login)"
+            self.add_sys("Login: enter username (empty Enter cancels)")
         elif cmd == "apikey":
-            self.add_sys("换大模型 API Key:选服务(回车 = 1 Kimi),"
-                         "选中后自动在浏览器打开它的控制台:")
+            self.add_sys("Change LLM API key: pick a provider (Enter = 1 Kimi);"
+                         " its console opens in your browser:")
             for i, (_pid, label, _u) in enumerate(PROVIDER_MENU, 1):
                 self.add_sys("  %d) %s" % (i, label))
             self.keywiz = {"step": "provider"}
@@ -1717,15 +1718,15 @@ class MdAgentApp(App):
                 if drv is not None and getattr(drv, "_mouse", False):
                     drv._disable_mouse_support()
                     _alt_scroll(True)
-                    self.add_sys("鼠标捕获: 关 —— 直接框选复制,滚轮经 1007 "
-                                 "仍可滚(终端不支持就 PgUp/PgDn)。再敲 /mouse 切换")
+                    self.add_sys("Mouse capture OFF — native select/copy; wheel still scrolls"
+                                 " via mode 1007 (or PgUp/PgDn). /mouse to toggle")
                 elif drv is not None:
                     _alt_scroll(False)
                     drv._enable_mouse_support()
-                    self.add_sys("鼠标捕获: 开 —— 点击/滚轮恢复;"
-                                 "复制用 Shift+框选")
+                    self.add_sys("Mouse capture ON — click/wheel back;"
+                                 " copy with Shift+drag select")
             except Exception as e:
-                self.add_sys("鼠标切换失败: %s" % e)
+                self.add_sys("Mouse toggle failed: %s" % e)
         elif cmd == "status":
             asyncio.get_event_loop().create_task(self._status_cmd())
         elif cmd == "goal":
@@ -1733,11 +1734,11 @@ class MdAgentApp(App):
             self.query_one("#side").display = True
             asyncio.get_event_loop().create_task(self._goal_cmd())
         elif cmd in ("help", "h", "?"):
-            self.add_sys("命令: " + " │ ".join(
+            self.add_sys("Commands: " + " │ ".join(
                 c + (" " + a if a else "") + " " + d
-                for c, a, d in _COMMANDS) + " │ 打 / 弹菜单")
+                for c, a, d in _COMMANDS) + " │ type / for menu")
         else:
-            self.add_sys("未知命令 %s;/help 看全部" % cmd)
+            self.add_sys("Unknown command %s; /help lists all" % cmd)
 
     async def _archive_cmd(self, project):
         loop = asyncio.get_event_loop()
@@ -1745,11 +1746,11 @@ class MdAgentApp(App):
             r = await loop.run_in_executor(None, functools.partial(
                 _http, "POST", "/v1/conversations/%s/archive"
                 % urllib.parse.quote(project, safe=""), None, 15))
-            self.add_sys("已归档 %s(ts %s,含 %s);/restore %s 可恢复"
+            self.add_sys("Archived %s (ts %s, with %s); /restore %s to bring back"
                          % (project, r.get("archived_ts"),
                             "+".join(r.get("moved") or []), project))
         except Exception as e:
-            self.add_sys("归档失败: %s" % _err_text(e))
+            self.add_sys("Archive failed: %s" % _err_text(e))
 
     async def _restore_cmd(self, project):
         loop = asyncio.get_event_loop()
@@ -1757,10 +1758,10 @@ class MdAgentApp(App):
             r = await loop.run_in_executor(None, functools.partial(
                 _http, "POST", "/v1/conversations/%s/restore"
                 % urllib.parse.quote(project, safe=""), None, 15))
-            self.add_sys("已恢复 %s(%s)" % (project,
+            self.add_sys("Restored %s (%s)" % (project,
                                             "+".join(r.get("restored") or [])))
         except Exception as e:
-            self.add_sys("恢复失败: %s" % _err_text(e))
+            self.add_sys("Restore failed: %s" % _err_text(e))
 
     async def _goal_cmd(self):
         loop = asyncio.get_event_loop()
@@ -1769,7 +1770,7 @@ class MdAgentApp(App):
                 _http, "GET", "/v1/goal?project="
                 + urllib.parse.quote(_PROJECT, safe=""), None, 10))
         except Exception as e:
-            self.add_sys("目标查询失败: %s" % _err_text(e))
+            self.add_sys("Goal fetch failed: %s" % _err_text(e))
             return
         if d.get("exists"):
             asyncio.get_event_loop().create_task(
@@ -1787,20 +1788,20 @@ class MdAgentApp(App):
                 _http, "GET", "/v1/usage", None, 10))
             self.usage = u
             lim = u.get("limit_per_hour") or 0
-            self.add_sys("桥在线: %s │ 用量: %s %s │ 服务器: %s" % (
+            self.add_sys("Bridge online: %s │ usage: %s %s │ server: %s" % (
                 s.get("online"), u.get("chats_24h"),
-                "/%s 每小时" % lim if lim else "(不限量)",
+                "/%s per hour" % lim if lim else "(unlimited)",
                 (STATE["cfg"] or {}).get("server")))
         except Exception as e:
-            self.add_sys("状态查询失败: %s" % _err_text(e))
+            self.add_sys("Status failed: %s" % _err_text(e))
 
     def _resolve_confirm(self, text):
         what = self.confirm
         self.confirm = None
         if what == "auto_on":
             STATE["auto"] = text.strip().lower() == "yes"
-            self.add_sys("写操作免确认: %s"
-                         % ("开(谨慎!)" if STATE["auto"] else "关"))
+            self.add_sys("Write auto-approve: %s"
+                         % ("ON (careful!)" if STATE["auto"] else "OFF"))
 
     # ---- /login 两步登录 ----
     def _login_step(self, text):
@@ -1813,14 +1814,14 @@ class MdAgentApp(App):
             st["user"] = text.strip()
             st["step"] = "pwd"
             inp.password = True
-            inp.placeholder = "密码(不回显),回车登录"
-            self.add_sys("密码(输入不回显),回车登录;直接回车取消")
+            inp.placeholder = "Password (hidden), Enter to login"
+            self.add_sys("Password (hidden), Enter to login; empty Enter cancels")
             return
         self.login = None
         inp.password = False
-        inp.placeholder = "输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标"
+        inp.placeholder = "Message · / command menu · Paste Ctrl+Shift+V · Ctrl+G goals"
         if not text:
-            self.add_sys("已取消")
+            self.add_sys("Cancelled")
             return
         asyncio.get_event_loop().create_task(self._login_do(st["user"], text))
 
@@ -1830,22 +1831,22 @@ class MdAgentApp(App):
             d = await loop.run_in_executor(None, functools.partial(
                 _http, "GET", "/v1/conversations", None, 15))
         except Exception as e:
-            self.add_sys("取项目列表失败: %s" % _err_text(e))
+            self.add_sys("Failed to fetch projects: %s" % _err_text(e))
             return
         items = d.get("detail") or []
         if not items:
-            self.add_sys("云端还没有你的项目,直接开聊即可;新项目用 /project <名>")
+            self.add_sys("No projects yet on the cloud; just start chatting (or /project <name>)")
             return
         if arg:
             self._resume_pick(arg, items)
             return
-        self.add_sys("—— 你的项目(按最近活跃) ——")
+        self.add_sys("—— Your projects (by recent activity) ——")
         for i, it in enumerate(items[:20], 1):
             ts = time.strftime("%m-%d %H:%M",
                                time.localtime(it.get("mtime") or 0))
-            self.add_sys("%2d. %-28s 最后活跃 %s" % (i, it.get("name"), ts))
+            self.add_sys("%2d. %-28s active %s" % (i, it.get("name"), ts))
         self.resume = {"items": items[:20]}
-        self.add_sys("输序号续做对应项目(也可输项目名;直接回车取消)")
+        self.add_sys("Enter a number to resume (name also works; empty Enter cancels)")
 
     def _resume_pick(self, text, items):
         global _PROJECT
@@ -1857,17 +1858,17 @@ class MdAgentApp(App):
         if not name:
             name = text if any(it.get("name") == text for it in items) else ""
         if not name:
-            self.add_sys("没选到「%s」对应的项目,再试 /resume" % text)
+            self.add_sys("No project matched '%s', try /resume again" % text)
             return
         _PROJECT = name
-        self.add_sys("已续上项目「%s」,回放云端历史…" % name)
+        self.add_sys("Resumed project '%s', replaying history…" % name)
         asyncio.get_event_loop().create_task(self._load_history(name))
 
     def _resume_step(self, text):
         items = (self.resume or {}).get("items") or []
         self.resume = None
         if not text:
-            self.add_sys("已取消 /resume")
+            self.add_sys("Cancelled /resume")
             return
         self._resume_pick(text, items)
 
@@ -1875,22 +1876,22 @@ class MdAgentApp(App):
         self.login = None
         inp = self.query_one("#composer", Input)
         inp.password = False
-        inp.placeholder = "输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标"
-        self.add_sys("已取消 /login")
+        inp.placeholder = "Message · / command menu · Paste Ctrl+Shift+V · Ctrl+G goals"
+        self.add_sys("Cancelled /login")
 
     async def _login_do(self, user, pwd):
         loop = asyncio.get_event_loop()
         server = (STATE["cfg"] or {}).get("server") or DEFAULT_SERVER
-        self.add_sys("登录中(输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标 @ 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标)…" % (user, server))
+        self.add_sys("Logging in as %s @ %s…" % (user, server))
         try:
             d = await loop.run_in_executor(None, functools.partial(
                 _login, server, user, pwd))
         except Exception as e:
-            self.add_sys("登录失败: 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标" % e)
+            self.add_sys("Login failed: %s" % _err_text(e))
             return
         root = str(STATE["jail"].root) if STATE["jail"] else os.getcwd()
         STATE["cfg"] = _save_cfg(server, d["token"], root)
-        self.add_sys("登录成功: 输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · 拖选后 Ctrl+C 复制 · Ctrl+G 目标(token 已存本机,旧 token 作废)"
+        self.add_sys("Login OK: %s (token saved locally, old token revoked)"
                      % d.get("username", user))
 
     # ---- /apikey 两步向导 ----
@@ -1906,26 +1907,26 @@ class MdAgentApp(App):
                 pid = sel or "kimi-coding"
                 url = dict((m[0], m[2]) for m in PROVIDER_MENU).get(pid, "")
             if url:
-                self.add_sys("正在浏览器打开控制台(%s),登录后复制 API key "
-                             "回来粘贴;没打开就手动访问: %s" % (pid, url))
+                self.add_sys("Opening console (%s) in browser; copy the API key back"
+                             " here. If it didn't open, visit: %s" % (pid, url))
                 threading.Thread(target=lambda: webbrowser.open(url),
                                  daemon=True).start()
             else:
-                self.add_sys("provider=%s(无已知控制台网址,直接贴 key)" % pid)
+                self.add_sys("provider=%s (no known console URL, just paste the key)" % pid)
             wiz["provider"] = pid
             wiz["step"] = "key"
             inp.password = True      # key 不回显
-            inp.placeholder = "粘贴 sk- 开头的 API Key(不回显),回车提交"
-            self.add_sys("第 2 步:粘贴 API Key(输入不回显),回车提交;"
-                         "直接回车取消")
+            inp.placeholder = "Paste the sk- API key (hidden), Enter to submit"
+            self.add_sys("Step 2: paste the API key (hidden), Enter to submit;"
+                         " empty Enter cancels")
             return
         self.keywiz = None
         inp.password = False
-        inp.placeholder = ("输入消息 · / 命令菜单 · 粘贴 Ctrl+Shift+V · "
-                           "拖选后 Ctrl+C 复制 · Ctrl+G 目标")
+        inp.placeholder = ("Message · / command menu · Paste Ctrl+Shift+V · "
+                           "select+Ctrl+C copy · Ctrl+G goals")
         key = text.strip()
         if not key:
-            self.add_sys("已取消")
+            self.add_sys("Cancelled")
             return
         asyncio.get_event_loop().create_task(
             self._apikey_save(wiz["provider"], key))
@@ -1936,10 +1937,10 @@ class MdAgentApp(App):
             await loop.run_in_executor(None, functools.partial(
                 _http, "POST", "/v1/me/apikey",
                 {"provider": provider, "api_key": key}, 15))
-            self.add_sys("API Key 已更新(provider=%s),云端三处同步生效"
+            self.add_sys("API key updated (provider=%s), synced cloud-side"
                          % provider)
         except Exception as e:
-            self.add_sys("API Key 更新失败: %s" % _err_text(e))
+            self.add_sys("API key update failed: %s" % _err_text(e))
 
     # ---- 写批准 ----
     def _check_pending(self):
@@ -1955,22 +1956,22 @@ class MdAgentApp(App):
         self.approval = item
         _, req = item
         if req.get("kind") == "delete":
-            head = "⚠ 云端智能体请求删除(不可恢复): %s" % req["path"]
-            title = "删除批准 · 100s 未答自动拒绝"
+            head = "⚠ Cloud agent requests DELETE (irreversible): %s" % req["path"]
+            title = "Delete approval · auto-deny in 100s"
         elif req.get("kind") == "exec":
-            head = "⚠ 云端智能体请求执行命令: %s" % req["path"]
-            title = "命令批准 · 100s 未答自动拒绝"
+            head = "⚠ Cloud agent requests EXEC: %s" % req["path"]
+            title = "Exec approval · auto-deny in 100s"
         else:
-            head = "⚠ 云端智能体请求写入: %s (%d 字节)" % (req["path"],
+            head = "⚠ Cloud agent requests WRITE: %s (%d bytes)" % (req["path"],
                                                          req["bytes"])
-            title = "写批准 · 100s 未答自动拒绝"
+            title = "Write approval · auto-deny in 100s"
         card = ApprovalCard(
             Static(Text(head, style="bold #E6B450")),
             Static(Text("\n".join("  " + l for l in
                                   str(req["preview"]).split("\n")[:6]),
                         style="#C9D1E0")),
-            Horizontal(Button("批准 (y)", id="btn-ok", compact=True),
-                       Button("拒绝 (n)", id="btn-no", compact=True)),
+            Horizontal(Button("Approve (y)", id="btn-ok", compact=True),
+                       Button("Deny (n)", id="btn-no", compact=True)),
             id="approval")
         card.border_title = title
         self.query_one("#approval-slot").mount(card)
@@ -1985,7 +1986,7 @@ class MdAgentApp(App):
         req["event"].set()
         for w in self.query("#approval"):
             w.remove()
-        self.add_sys("已%s: %s" % ("批准" if ok else "拒绝", req["path"]))
+        self.add_sys("%s: %s" % ("approved" if ok else "denied", req["path"]))
         self.query_one("#composer", Input).focus()
 
     def action_approve(self):
@@ -2007,7 +2008,7 @@ class MdAgentApp(App):
         if not self.busy or not self._job_id:
             return
         jid = self._job_id
-        self.add_sys("⏹ 正在打断…")
+        self.add_sys("⏹ Interrupting…")
 
         async def _c():
             try:
@@ -2015,7 +2016,7 @@ class MdAgentApp(App):
                     None, functools.partial(
                         _http, "POST", "/v1/jobs/%s/cancel" % jid, None, 15))
             except Exception as e:
-                self.add_sys("打断请求失败: %s" % _err_text(e))
+                self.add_sys("Interrupt failed: %s" % _err_text(e))
         asyncio.get_event_loop().create_task(_c())
 
     def action_quit_app(self):
@@ -2037,16 +2038,16 @@ class MdAgentApp(App):
 
 def main():
     global _PROJECT
-    ap = argparse.ArgumentParser(description="mdagent TUI 客户端(终端里的云端智能体)")
+    ap = argparse.ArgumentParser(description="mdagent TUI client - cloud agent in your terminal")
     ap.add_argument("--server", default=None)
     ap.add_argument("--token", default=None)
     ap.add_argument("--root", default=None)
     ap.add_argument("--project", "-p", default=None,
-                    help="直接指定会话项目")
+                    help="start with this project")
     ap.add_argument("--resume", action="store_true",
-                    help="启动时挑旧项目续做(列出按最近活跃排序)")
+                    help="pick a past project to resume at startup")
     ap.add_argument("-c", "--continue", dest="cont", action="store_true",
-                    help="直接续做最近的项目")
+                    help="resume the most recent project")
     args = ap.parse_args()
 
     cfg = _load_cfg() or {}
@@ -2057,94 +2058,94 @@ def main():
     if args.token:
         ok, msg = _verify_token(cfg["server"], cfg["token"])
         if not ok:
-            sys.exit("token 校验失败(%s),未保存" % msg)
+            sys.exit("Token check failed (%s), not saved" % msg)
     if not cfg.get("token"):
         # 首次配置:进全屏前用普通 input 问完(免得在 TUI 里做表单)。
         # EOF 兜底:curl|sh 管道跑时 stdin 是管道,input 立即 EOF——指路直跑
         try:
-            print("首次配置(只问一次,存 %s,权限 600):" % CONFIG)
-            server = input("  服务器 [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
+            print("First-time setup (asked once; saved to %s, mode 600):" % CONFIG)
+            server = input("  Server [%s]: " % DEFAULT_SERVER).strip() or DEFAULT_SERVER
             preset_token = ""
             if server.startswith("mda_"):
                 preset_token = server
                 server = DEFAULT_SERVER
-                print("  (检测到你贴的是 token:已当 token 用,服务器取默认 %s)" % server)
+                print("  (That looks like a token; using it as token with default server %s)" % server)
             if not server.startswith(("http://", "https://")):
-                sys.exit("服务器地址须 http(s):// 开头(收到 %r),未保存配置"
+                sys.exit("Server must start with http(s):// (got %r), config not saved"
                          % server[:40])
-            print("  1) 账号密码登录(推荐,审批通过后即可用)")
-            print("  2) 直接贴 token(mda_ 开头,管理员发的)")
-            print("  3) 注册新账号(提交申请,等管理员批准)")
-            choice = input("  选 [1]: ").strip() or "1"
+            print("  1) Login with username/password (recommended)")
+            print("  2) Paste a token (mda_..., issued by admin)")
+            print("  3) Register a new account (needs admin approval)")
+            choice = input("  Select [1]: ").strip() or "1"
             token = ""
             if choice == "3":
                 _register_flow(server)
                 return
             if choice == "1":
                 import getpass
-                user = input("  用户名: ").strip()
-                pwd = getpass.getpass("  密码: ")
+                user = input("  Username: ").strip()
+                pwd = getpass.getpass("  Password: ")
                 try:
                     d = _login(server, user, pwd)
                     token = d["token"]
-                    print("  登录成功(token 已自动获取)")
+                    print("  Login OK (token fetched)")
                 except Exception as ex:
-                    sys.exit("登录失败: %s" % ex)
+                    sys.exit("Login failed: %s" % ex)
             else:
                 token = preset_token or input("  token: ").strip()
                 ok, msg = _verify_token(server, token)
                 if not ok:
-                    sys.exit("token 校验失败(%s)——未保存配置,重跑再贴一次" % msg)
-                print("  token 校验通过")
-            root = input("  开放给智能体的目录 [%s]: " % os.getcwd()).strip() or os.getcwd()
+                    sys.exit("Token check failed (%s) - not saved; rerun and paste again" % msg)
+                print("  Token OK")
+            root = input("  Dir to open to the agent [%s]: " % os.getcwd()).strip() or os.getcwd()
             if not token.startswith("mda_"):
-                sys.exit("token 格式不对(mda_ 开头)")
+                sys.exit("Bad token format (must start with mda_)")
             cfg = _save_cfg(server, token, root)
         except EOFError:
-            sys.exit("\n[!] 没有可用的交互输入(命令可能经管道运行,如 curl … | sh)。\n"
-                     "    请进入解压后的目录直接运行: python3 client/mdagent_tui.py")
+            sys.exit("\n[!] No interactive input (piped run, e.g. curl … | sh).\n"
+                     "    Run it from the extracted dir instead: python3 client/mdagent_tui.py")
     STATE["cfg"] = cfg
     STATE["jail"] = Jail(cfg.get("root") or os.getcwd())
     if STATE["jail"].root.parent == STATE["jail"].root or \
             STATE["jail"].root == Path.home():
-        print("!! 警告: 开放的是整盘/家目录,其中文件可被远程读取;"
-              "建议只开放项目目录(可用 /root 换)")
+        print("!! WARNING: whole disk/home dir opened; files can be read remotely;"
+              " better open a project dir (/root to change)")
 
     if args.project:
         _PROJECT = args.project
-        print("会话项目: %s(启动后自动回放云端历史)" % _PROJECT)
+        print("Project: %s (cloud history replayed on start)" % _PROJECT)
     if args.resume or args.cont:
         try:
             d = _http("GET", "/v1/conversations", None, 15)
             items = d.get("detail") or []
             if not items:
-                print("云端还没有你的项目,直接开聊即可")
+                print("No projects on the cloud yet; just start chatting")
             elif args.cont:
                 _PROJECT = items[0]["name"]
-                print("续做最近项目「%s」" % _PROJECT)
+                print("Resuming most recent project '%s'" % _PROJECT)
             else:
-                print("你的项目(按最近活跃排序):")
+                print("Your projects (by recent activity):")
                 for i, it in enumerate(items[:20], 1):
-                    print("  %2d. %-28s 最后活跃 %s"
+                    print("  %2d. %-28s active %s"
                           % (i, it.get("name"),
                              time.strftime("%m-%d %H:%M",
                                            time.localtime(it.get("mtime") or 0))))
-                sel = input("续做哪个 [1]: ").strip() or "1"
+                sel = input("Resume which [1]: ").strip() or "1"
                 i = int(sel) - 1 if sel.isdigit() else -1
                 if not (0 <= i < len(items[:20])):
-                    sys.exit("序号无效")
+                    sys.exit("Invalid number")
                 _PROJECT = items[i]["name"]
-                print("已选「%s」(启动后自动回放云端历史)" % _PROJECT)
+                print("Selected '%s' (cloud history replayed on start)" % _PROJECT)
         except EOFError:
-            sys.exit("\n[!] 无交互输入(管道运行),请改用 --project <名>")
+            sys.exit("\n[!] No interactive input (piped run); use --project <name> instead")
         except Exception as e:
-            print("(取项目列表失败: %s,沿用默认项目)" % _err_text(e))
+            print("(failed to fetch projects: %s, staying on default)" % _err_text(e))
     threading.Thread(target=_bridge_loop, daemon=True).start()
     try:
         MdAgentApp().run()
     except KeyboardInterrupt:
         pass
-    print("已断开,再见。")
+    print("Disconnected. Bye.")
 
 
 if __name__ == "__main__":

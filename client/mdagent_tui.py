@@ -976,7 +976,7 @@ class Banner(Static):
             t.append("  " + line + "\n", style="bold #5686FE")
         t.append("  MD Agent · Terminal Workbench\n", style="bold #C9D1E0")
         t.append("  Brain in the cloud (%s)\n" % server, style="#5F6B7A")
-        t.append("  Drag-select then Ctrl+C to copy · Wheel/arrows to scroll · /login to sign in\n",
+        t.append("  /copy = copy last reply · /paste from clipboard · Wheel/arrows scroll · /login to sign in\n",
                  style="#3A4152")
         t.append("  Open dir %s · every write/delete needs approval · /help for commands\n" % root,
                  style="#5F6B7A")
@@ -1124,6 +1124,8 @@ _COMMANDS = [
     ("/apikey", "", "change LLM API key (opens provider console)"),
     ("/login", "", "sign in with username/password"),
     ("/mouse", "", "toggle mouse capture (off = native select/copy)"),
+    ("/copy", "[n|all]", "copy last reply (or last n msgs) to clipboard"),
+    ("/paste", "", "paste from system clipboard into the input"),
     ("/evolution", "", "open the agent evolution graph in browser"),
     ("/status", "", "bridge status + hourly usage"),
     ("/help", "", "all commands"),
@@ -1354,6 +1356,7 @@ class MdAgentApp(App):
         self._cmd_open = False       # / 命令菜单
         self._cmd_matches = []
         self._cmd_idx = 0
+        self.msglog = collections.deque(maxlen=60)  # (role, text) 滚动账,/copy 用
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main"):
@@ -1468,9 +1471,11 @@ class MdAgentApp(App):
         asyncio.get_event_loop().create_task(self._mount(SysLine(msg)))
 
     def add_user(self, text):
+        self.msglog.append(("user", text))
         asyncio.get_event_loop().create_task(self._mount(UserLine(text)))
 
     def add_agent(self, md_text):
+        self.msglog.append(("agent", md_text))
         asyncio.get_event_loop().create_task(
             self._mount(AgentBody(md_text)))
 
@@ -1534,10 +1539,10 @@ class MdAgentApp(App):
         text = event.value.strip()
         event.input.value = ""
         if self._cmd_open and " " not in text:
-            exact = [c for c in self._cmd_matches
-                     if c[0] == text.lower() and not c[1]]
+            exact = [c for c in _COMMANDS if c[0] == text.lower()]
             if exact:
-                self._close_cmd_menu()   # 完整无参命令:直接执行(落到下面路由)
+                # 敲全的命令名(含带可选参数的,如 /copy):回车直接执行
+                self._close_cmd_menu()
             else:
                 self._cmd_complete()     # 片段:回车=补全选中项
                 event.input.value = self._cmd_matches[self._cmd_idx][0] + \
@@ -1626,6 +1631,8 @@ class MdAgentApp(App):
             self.phase = j.get("activity") or "Working (%s)…" % st
 
     def _stream_end(self, final=None):
+        if final:
+            self.msglog.append(("agent", final))
         if self.stream_card is not None:
             try:
                 if final is not None:
@@ -1737,6 +1744,10 @@ class MdAgentApp(App):
             for i, (_pid, label, _u) in enumerate(PROVIDER_MENU, 1):
                 self.add_sys("  %d) %s" % (i, label))
             self.keywiz = {"step": "provider"}
+        elif cmd == "copy":
+            self._copy_cmd(arg)
+        elif cmd == "paste":
+            self._paste_cmd()
         elif cmd == "mouse":
             try:
                 drv = self._driver
@@ -1812,6 +1823,63 @@ class MdAgentApp(App):
                                    classes="agentbody")))
         else:
             self.add_sys(_GOAL_HINT.split("\n")[0])
+
+    def _copy_cmd(self, arg):
+        """/copy:免鼠标复制。空=最近一条智能体回复;n=最近 n 条(含你的话);
+        all=本窗全部(≤60 条滚动账)。走 xclip(本机桌面剪贴板)→ OSC52。"""
+        arg = (arg or "").strip().lower()
+        if not self.msglog:
+            self.add_sys("Nothing to copy yet (this window's rolling log is empty)")
+            return
+        if arg in ("", "last", "1"):
+            idx = len(self.msglog) - 1
+            while idx >= 0 and self.msglog[idx][0] != "agent":
+                idx -= 1
+            if idx < 0:
+                self.add_sys("No agent reply in the rolling log yet")
+                return
+            role, text = self.msglog[idx]
+            what = "last reply"
+        elif arg == "all":
+            text = "\n\n".join(("❯ " if r == "user" else "") + t
+                               for r, t in self.msglog)
+            what = "all %d msgs" % len(self.msglog)
+        elif arg.isdigit() and int(arg) >= 1:
+            n = min(int(arg), len(self.msglog))
+            text = "\n\n".join(("❯ " if r == "user" else "") + t
+                               for r, t in list(self.msglog)[-n:])
+            what = "last %d msgs" % n
+        else:
+            self.add_sys("Usage: /copy [n|all]  (empty = last reply)")
+            return
+        self.copy_to_clipboard(text)
+        self.add_sys("Copied %s (%d chars) to clipboard — paste anywhere"
+                     % (what, len(text)))
+
+    def _paste_cmd(self):
+        """/paste:把系统剪贴板内容放进输入框(终端 Ctrl+Shift+V 失灵时的备胎)。"""
+        import shutil
+        xclip = shutil.which("xclip")
+        if not xclip:
+            self.add_sys("/paste needs xclip (not found); use the terminal's"
+                         " Ctrl+Shift+V / middle-click instead")
+            return
+        try:
+            r = subprocess.run([xclip, "-o", "-selection", "clipboard"],
+                               stdout=subprocess.PIPE, timeout=3)
+            text = r.stdout.decode("utf-8", "replace").strip("\n")
+        except Exception as e:
+            self.add_sys("Clipboard read failed: %s" % e)
+            return
+        if not text:
+            self.add_sys("Clipboard is empty")
+            return
+        inp = self.query_one("#composer", Input)
+        inp.value = (inp.value + " " + text).strip() if inp.value else text
+        inp.action_end()
+        inp.focus()
+        self.add_sys("Pasted %d chars into the input (edit then Enter to send)"
+                     % len(text))
 
     async def _status_cmd(self):
         loop = asyncio.get_event_loop()

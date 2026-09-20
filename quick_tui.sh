@@ -1,6 +1,8 @@
 #!/bin/sh
 # 一键装 mdagent TUI(Linux/macOS,免 root):下载 → 装 textual → 启动首跑向导
-# 用法: curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main/quick_tui.sh | sh
+# 用法(免向导,token 直接嵌进命令发给使用者):
+#   curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main/quick_tui.sh | sh -s -- --token mda_xxx --root ~/mdtest
+# 不带参数则进首跑向导
 set -e
 REPO=https://github.com/myyang2023go-droid/mdagent-tui
 
@@ -21,4 +23,4 @@ python3 -m pip install --user textual \
 echo "[3/3] 启动 TUI(首跑向导: 服务器回车 -> 选 2 贴 token -> 选开放目录)"
 # curl|sh 管道跑时 stdin 被管道占用,input() 会立即 EOF——还给终端
 if [ -c /dev/tty ]; then exec < /dev/tty; fi
-python3 client/mdagent_tui.py
+python3 client/mdagent_tui.py "$@"

@@ -1751,6 +1751,10 @@ def main():
         cfg = _save_cfg(args.server or cfg.get("server") or DEFAULT_SERVER,
                         args.token or cfg.get("token") or "",
                         args.root or cfg.get("root") or "")
+    if args.token:
+        ok, msg = _verify_token(cfg["server"], cfg["token"])
+        if not ok:
+            sys.exit("token 校验失败(%s),未保存" % msg)
     if not cfg.get("token"):
         # 首次配置:进全屏前用普通 input 问完(免得在 TUI 里做表单)。
         # EOF 兜底:curl|sh 管道跑时 stdin 是管道,input 立即 EOF——指路直跑

@@ -975,32 +975,24 @@ _APP = None
 _PROJECT = "default"
 _EXPLICIT_PROJECT = False   # --project/--resume/-c:启动即载入该项目(回放+任务档)
 
-_SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPIN = "✢✳✶✷✻✽✳✢"
 
-# 欢迎 logo(自有品牌 MD-EXP)
-_LOGO = [
-    "▐▙   ▟▌ █▀▛▖ ▖",
-    "▐▌▘ ▝▐▌ █  █▞ ",
-    "▐▌█ █▐▌ █  █  ",
-    "▐▌·▀·▐▌ █  █▚ ",
-    "▐▌   ▐▌ █▄▜▘ ▘",
-    "    ᴱˣᵖ       ",
-]
+# CC 式配色:赤陶橙前景 + 暖白正文 + 三级暗灰
+_ACCENT = "#D97757"
 
 
 class Banner(Static):
-    """启动欢迎:MDᴱˣᵖ 积木 logo + 一句话指引。"""
+    """启动欢迎:CC 式极简(✻ 品牌行 + 环境行 + 暗色提示行)。"""
 
     def __init__(self, server, root):
         t = Text()
-        for line in _LOGO:
-            t.append("  " + line + "\n", style="bold #5686FE")
-        t.append("  MD Agent · Terminal Workbench\n", style="bold #C9D1E0")
-        t.append("  Brain in the cloud (%s)\n" % server, style="#5F6B7A")
-        t.append("  /copy = copy last reply · /paste from clipboard · Wheel/arrows scroll · /login to sign in\n",
-                 style="#3A4152")
-        t.append("  Open dir %s · every write/delete needs approval · /help for commands\n" % root,
-                 style="#5F6B7A")
+        t.append("✻ ", style="bold %s" % _ACCENT)
+        t.append("mdagent", style="bold #F5F4F2")
+        t.append("  MDᴱˣᵖ · cloud-brain workbench\n", style="#7D7C7A")
+        t.append("  brain %s\n" % server, style="#55524F")
+        t.append("  open dir %s\n" % root, style="#55524F")
+        t.append("  writes need approval · / commands · ctrl+g goals · esc interrupts\n",
+                 style="#3F3D3A")
         super().__init__(t, classes="banner")
 
 
@@ -1022,28 +1014,33 @@ class SysLine(Static):
 
 
 class UserLine(Static):
-    """用户消息:❯ 琥珀前缀 + 加粗正文,无气泡。"""
+    """用户消息:❯ 赤陶橙前缀 + 暖白加粗正文,无气泡(CC 式)。"""
 
     def __init__(self, text):
         t = Text()
-        t.append("❯ ", style="bold #D29922")
-        t.append(text, style="bold #E6EAF2")
+        t.append("❯ ", style="bold %s" % _ACCENT)
+        t.append(text, style="bold #F5F4F2")
         super().__init__(t, classes="userline")
 
 
 class OpLine(Static):
-    """文件操作动态(⏺ 行):成功暗绿、被拒/失败红。"""
+    """文件操作(CC 式工具调用):⏺ 名字(路径) + 换行 ⎿ 结果摘要。"""
 
     def __init__(self, op, ok):
         name = op.get("op") or "?"
-        path = (op.get("args") or {}).get("path") or ""
+        args = op.get("args") or {}
+        path = args.get("path") or args.get("cmd") or args.get("pattern") or ""
         t = Text()
-        t.append("  ⏺ ", style="#3FB950" if ok else "#F85149")
-        t.append("%s %s" % (_OP_ICON.get(name, "•"), name), style="#97A0B0")
-        t.append(" " + path, style="#5F6B7A")
-        t.append("  " + time.strftime("%H:%M"), style="#3A4152")
-        if not ok:
-            t.append("  ✗ " + str(op.get("_err") or "rejected/failed"),
+        t.append("⏺ ", style=_ACCENT if ok else "#F85149")
+        t.append(name, style="bold #E8E6E3" if ok else "#F85149")
+        if path:
+            t.append("(%s)" % str(path)[:120], style="#7D7C7A")
+        t.append("\n")
+        t.append("  ⎿ ", style="#55524F")
+        if ok:
+            t.append("done · %s" % time.strftime("%H:%M"), style="#55524F")
+        else:
+            t.append(str(op.get("_err") or "rejected/failed")[:160],
                      style="#F85149")
         super().__init__(t, classes="opline")
 
@@ -1053,8 +1050,8 @@ class ThinkBlock(Static):
 
     def show(self, text):
         tail = text[-4000:]
-        self.update(Text("  ✶ " + tail.replace("\n", " "),
-                         style="italic #5F6B7A"))
+        self.update(Text("  ✻ " + tail.replace("\n", " "),
+                         style="italic #7D7C7A"))
         self.display = True
 
     def hide(self):
@@ -1121,7 +1118,7 @@ class StreamCard(Vertical):
             col = Collapsible(
                 Static(Text(self._thinking_seen[-8000:],
                             style="italic #5F6B7A")),
-                title="✶ Thinking (%d chars, expand for full)" % len(self._thinking_seen),
+                title="✻ Thinking (%d chars, expand for full)" % len(self._thinking_seen),
                 collapsed=True)
             self.mount(col, before=self.body)
         else:
@@ -1273,34 +1270,35 @@ class StatusBar(Static):
         app = self.app
         if getattr(app, "busy", False):
             frame = _SPIN[getattr(app, "_spin_i", 0) % len(_SPIN)]
-            t.append(" %s " % frame, style="#D29922")
-            t.append(app.phase or "Thinking…", style="#D29922")
+            t.append(" %s " % frame, style=_ACCENT)
+            t.append(app.phase or "Thinking…", style="#E8E6E3")
             bs = getattr(app, "_busy_since", None)
             if bs:
-                t.append(" %ds" % int(time.time() - bs), style="#D29922")
+                t.append(" (%ds · esc to interrupt)" % int(time.time() - bs),
+                         style="#7D7C7A")
             qn = len(getattr(app, "_queue") or ())
             if qn:
-                t.append("  ·  ⏳ %d queued" % qn, style="#D29922")
-            t.append("  ·  ", style="#3A4152")
+                t.append("  ·  ⏳ %d queued" % qn, style=_ACCENT)
+            t.append("  ·  ", style="#3F3D3A")
         else:
             t.append(" ● ", style="#3FB950" if online else "#F85149")
-            t.append("online" if online else "offline", style="#97A0B0")
-            t.append("  ·  ", style="#3A4152")
-        t.append("⛁ %s" % _PROJECT, style="#5686FE")
-        t.append("  ·  ", style="#3A4152")
+            t.append("ready" if online else "offline", style="#7D7C7A")
+            t.append("  ·  ", style="#3F3D3A")
+        t.append("⛁ %s" % _PROJECT, style="#8A9BB8")
+        t.append("  ·  ", style="#3F3D3A")
         t.append("%s" % (STATE["jail"].root if STATE["jail"] else "?"),
-                 style="#5F6B7A")
+                 style="#55524F")
         u = getattr(app, "usage", None) or {}
         lim = u.get("limit_per_hour") or 0
         t.append("  ·  chats %s%s" % (u.get("chats_24h", "?"),
                                       "/%s per hour" % lim if lim else " · unlimited"),
-                 style="#5F6B7A")
+                 style="#55524F")
         gs = getattr(app, "goal_summary", None)
         if gs:
-            t.append("  ·  🎯 %d/%d" % gs, style="#5686FE")
+            t.append("  ·  🎯 %d/%d" % gs, style="#8A9BB8")
         if STATE["auto"]:
             t.append("  ·  ⚠ auto-approve ON", style="#D29922")
-        t.append("  ·  Ctrl+G goals", style="#3A4152")
+        t.append("  ·  /help · ctrl+g · ctrl+q", style="#3F3D3A")
         return t
 
 
@@ -1324,7 +1322,7 @@ class MdAgentApp(App):
 
     CSS = """
     Screen { background: #0F1115; }
-    #status { height: 1; background: #161B27; }
+    #status { height: 1; background: #131110; }
     #main { height: 1fr; }
     #chat { padding: 1 2 0 2; }
     .userline { margin-top: 1; }
@@ -1336,27 +1334,27 @@ class MdAgentApp(App):
     .streamcard ThinkBlock { max-height: 8; padding-left: 0; overflow-y: hidden; }
     #approval-slot { height: auto; }
     #approval {
-        border: round #D29922; background: #1A1F2B;
+        border: round #D97757; background: #1C1917;
         padding: 0 1; margin: 0 2 0 2; height: auto;
     }
     #approval Static { padding: 0 1; }
     #approval .prev { height: auto; max-height: 12; padding: 0 1; }
     #cmd-menu {
         display: none; height: auto; margin: 0 2;
-        padding: 0 1; border: round #3A4152; background: #12151D;
+        padding: 0 1; border: round #3F3D3A; background: #14120F;
     }
     #composer { height: auto; }
-    #side { width: 44; border-left: solid #232A3B; padding: 1 0 0 1; }
+    #side { width: 44; border-left: solid #2A2622; padding: 1 0 0 1; }
     #goal {
         border: round #2E4A8F; height: auto; max-height: 55%;
         padding: 0 1; margin-bottom: 1;
     }
-    #ops { border: round #232A3B; height: 1fr; padding: 0 1; }
+    #ops { border: round #2A2622; height: 1fr; padding: 0 1; }
     Input {
-        border: round #3A4152; background: #12151D; color: #E6EAF2;
+        border: round #3F3D3A; background: #12151D; color: #F5F4F2;
         margin: 0 2 0 2;
     }
-    Input:focus { border: round #D29922; }
+    Input:focus { border: round #D97757; }
     Button { margin: 0 1; min-width: 8; }
     #btn-ok { background: #2E4A8F; }
     #btn-no { background: #3A2028; }
@@ -1417,8 +1415,7 @@ class MdAgentApp(App):
                 yield OpsPanel()
         yield Vertical(id="approval-slot")
         yield Static(id="cmd-menu")
-        yield CommandInput(placeholder="Message · / command menu · Paste Ctrl+Shift+V · "
-                                       "select+Ctrl+C copy · Ctrl+G goals",
+        yield CommandInput(placeholder="Reply to the agent… · / commands · esc interrupts · ctrl+g goals",
                            id="composer")
         yield StatusBar(id="status")
 
@@ -1554,13 +1551,13 @@ class MdAgentApp(App):
         t = Text()
         for i, (cmd, arg, desc) in enumerate(self._cmd_matches):
             sel = i == self._cmd_idx
-            t.append(" ▶ " if sel else "   ",
-                     style="#D29922" if sel else "#3A4152")
-            t.append(cmd, style="bold #E6EAF2" if sel else "#97A0B0")
+            t.append(" ❯ " if sel else "   ",
+                     style="bold %s" % _ACCENT if sel else "#3F3D3A")
+            t.append(cmd, style="bold #F5F4F2" if sel else "#7D7C7A")
             if arg:
-                t.append(" " + arg, style="#5686FE" if sel else "#3A4152")
+                t.append(" " + arg, style="#8A9BB8" if sel else "#3F3D3A")
             t.append("  " + desc + "\n",
-                     style="#C9D1E0" if sel else "#5F6B7A")
+                     style="#C9C5C0" if sel else "#55524F")
         try:
             menu = self.query_one("#cmd-menu", Static)
         except Exception:

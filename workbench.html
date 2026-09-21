@@ -129,10 +129,9 @@
   <span style="display:flex;align-items:center"><span class="logo"></span><b>MDᴱˣᵖ · 网页工作台</b></span>
   <span class="hint">左:云端智能体对话(流式) · 右:共享进化图谱</span>
   <span class="spacer"></span>
-  <select id="proj" class="navbtn boxed" title="切换项目(上下文独立,自动回放云端历史)"></select>
-  <button id="newproj" class="navbtn boxed" title="新开一个项目会话">+ 项目</button>
+  <select id="proj" class="navbtn boxed" style="display:none" title="切换项目(上下文独立,自动回放云端历史)"><option value="">default</option></select>
+  <button id="newproj" class="navbtn boxed" style="display:none" title="新开一个项目会话">+ 项目</button>
   <a class="navbtn boxed" href="/mdagent/evolution.html" target="_blank">🧬 进化图谱 ↗</a>
-  <a class="navbtn boxed" href="/mdboard/" target="_blank">📊 看板 ↗</a>
   <a class="navbtn boxed" href="/mdagent/register.html" target="_blank">注册 ↗</a>
   <button id="logout" class="navbtn boxed">退出</button>
 </div>
@@ -350,6 +349,8 @@ h('#logout').onclick = function(){
 function enterApp(){
   h('#login').style.display = 'none';
   h('#main').style.display = 'flex';
+  h('#proj').style.display = '';
+  h('#newproj').style.display = '';
   // 右栏图谱:同源 iframe 与本页共享 sessionStorage,进化图谱自动拿到 token
   h('#graph-hold').style.display = 'none';
   h('#graph-frame').src = '/mdagent/evolution.html';

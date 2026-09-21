@@ -14,8 +14,27 @@ PYV=$(python3 -c 'import sys;print("%d%02d"%sys.version_info[:2])')
 D=$(mktemp -d /tmp/mdagent.XXXXXX)
 cd "$D"
 echo "[1/3] 下载 $REPO ..."
-curl -fsSL -o tui.tar.gz "$REPO/archive/refs/heads/main.tar.gz"
-tar xzf tui.tar.gz && cd mdagent-tui-main
+# 国内网络 github.com 常不通,依次回退:codeload → api.github.com → raw 逐文件
+dl_archive() {
+  curl -fsSL --connect-timeout 8 --max-time 90 -o tui.tar.gz \
+    "$REPO/archive/refs/heads/main.tar.gz" && return 0
+  curl -fsSL --connect-timeout 8 --max-time 90 -o tui.tar.gz \
+    "https://codeload.github.com/myyang2023go-droid/mdagent-tui/tar.gz/refs/heads/main" && return 0
+  curl -fsSL --connect-timeout 8 --max-time 90 -o tui.tar.gz \
+    "https://api.github.com/repos/myyang2023go-droid/mdagent-tui/tarball/main" && return 0
+  return 1
+}
+if dl_archive; then
+  tar xzf tui.tar.gz
+  cd "$(find . -maxdepth 1 -mindepth 1 -type d | head -1)"
+else
+  echo "[i] 归档源全不通,改用 raw.githubusercontent 逐文件下载 ..."
+  RAW=https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main
+  mkdir -p client
+  curl -fsSL --connect-timeout 8 -o client/mdagent_tui.py "$RAW/client/mdagent_tui.py"
+  curl -fsSL --connect-timeout 8 -o client/mdagent_client.py "$RAW/client/mdagent_client.py"
+  curl -fsSL --connect-timeout 8 -o install.sh "$RAW/install.sh"
+fi
 echo "[2/4] 安装依赖 textual ..."
 python3 -m pip install --user textual \
   || python3 -m pip install --user --break-system-packages textual \

@@ -1083,6 +1083,16 @@ class MdBody(Static):
         return selection.extract(cap.get()), "\n"
 
 
+class QueuedLine(Static):
+    """任务进行中用户敲下的话:进队列,本轮结束自动发出(CC 同款)。"""
+
+    def __init__(self, text):
+        t = Text()
+        t.append("  ⏳ ", style="#D29922")
+        t.append(text, style="bold #D29922")
+        super().__init__(t, classes="userline")
+
+
 class StreamCard(Vertical):
     """智能体流式块:上=思维链(暗),下=正文 markdown;done 后思维链折叠。"""
 
@@ -1136,6 +1146,7 @@ class ApprovalCard(Horizontal):
 _COMMANDS = [
     ("/project", "<name>", "switch project (own context, history replayed)"),
     ("/clear", "", "clear the screen (cloud history untouched)"),
+    ("/unqueue", "", "drop messages queued while the agent was busy"),
     ("/resume", "[n]", "resume a past project (by recent activity)"),
     ("/policy", "", "show/reload local policy mdagent.md"),
     ("/archive", "[name]", "archive project (default = current)"),
@@ -1267,6 +1278,9 @@ class StatusBar(Static):
             bs = getattr(app, "_busy_since", None)
             if bs:
                 t.append(" %ds" % int(time.time() - bs), style="#D29922")
+            qn = len(getattr(app, "_queue") or ())
+            if qn:
+                t.append("  ·  ⏳ %d queued" % qn, style="#D29922")
             t.append("  ·  ", style="#3A4152")
         else:
             t.append(" ● ", style="#3FB950" if online else "#F85149")
@@ -1392,6 +1406,8 @@ class MdAgentApp(App):
         self._cmd_matches = []
         self._cmd_idx = 0
         self.msglog = collections.deque(maxlen=60)  # (role, text) 滚动账,/copy 用
+        self._queue = collections.deque()           # 忙时输入排队:(text, widget)
+        self._qhint = False                         # 排队提示只显一次
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main"):
@@ -1611,7 +1627,14 @@ class MdAgentApp(App):
             self._command(text)
             return
         if self.busy:
-            self.add_sys("A task is still running, wait for it… (ESC to interrupt)")
+            # CC 同款:忙时输入进队列,本轮结束自动逐条发出;ESC 打断当前轮
+            q = QueuedLine(text)
+            self._queue.append((text, q))
+            asyncio.get_event_loop().create_task(self._mount(q))
+            if not self._qhint:
+                self._qhint = True
+                self.add_sys("queued — sends automatically when the current turn"
+                             " finishes (ESC interrupts it; /unqueue drops)")
             return
         self.add_user(text)
         asyncio.get_event_loop().create_task(self._send(text))
@@ -1687,6 +1710,19 @@ class MdAgentApp(App):
         self.busy = False
         self._busy_since = None
         self._job_id = None
+        self._drain_queue()
+
+    def _drain_queue(self):
+        """本轮收尾:队列里有话就自动发下一条(队列 FIFO,一条一轮)。"""
+        if self.busy or not self._queue:
+            return
+        text, w = self._queue.popleft()
+        try:
+            w.remove()
+        except Exception:
+            pass
+        self.add_user(text)
+        asyncio.get_event_loop().create_task(self._send(text))
 
     async def _load_history(self, project):
         loop = asyncio.get_event_loop()
@@ -1785,6 +1821,15 @@ class MdAgentApp(App):
                              " without asking each time. Still jailed to the open dir;"
                              " deletes always ask; MD engines still need supervise."
                              " Type yes to confirm, anything else cancels")
+        elif cmd == "unqueue":
+            n = len(self._queue)
+            for _t, w in self._queue:
+                try:
+                    w.remove()
+                except Exception:
+                    pass
+            self._queue.clear()
+            self.add_sys("Dropped %d queued message(s)" % n)
         elif cmd == "resume":
             asyncio.get_event_loop().create_task(self._resume_cmd(arg))
         elif cmd == "policy":

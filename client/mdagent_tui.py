@@ -98,8 +98,8 @@ CLOUD_CASES = _kit_get("cloud_cases") or os.path.join(
 # 服务器地址与证书 SHA256 指纹(有效期至 2027-05-01;换证需重新下载本文件)。
 # kit 配置 server_default/cert_sha256 可覆盖;连非默认服务器且未配指纹 → 走系统 CA 校验
 DEFAULT_SERVER = _kit_get("server_default") or _BUILTIN_SERVER
-_BUILTIN_CERT = ("F1:75:DF:A3:B5:0F:69:7A:BA:88:C8:23:80:5D:44:11:"
-                 "E2:2C:AE:83:33:C5:99:47:A2:01:60:AB:63:BA:7C:69")
+_BUILTIN_CERT = ("72:AF:BD:99:C6:57:16:D4:C9:F3:58:FA:78:44:AB:E9:"
+                 "C7:2C:D5:B9:7E:13:FF:56:F8:83:CC:67:FB:CB:44:C2")
 CERT_SHA256 = (_kit_get("cert_sha256")
                or (_BUILTIN_CERT if DEFAULT_SERVER == _BUILTIN_SERVER
                    else None))

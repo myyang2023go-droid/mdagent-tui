@@ -82,8 +82,8 @@ def _docx_text(raw):
 # 服务器证书 SHA256 指纹 pinning(纯 -k 不验证会让中间人冒充服务器偷 token、
 # 推恶意文件操作)。kit 配置 cert_sha256 可覆盖;连非默认服务器且未配指纹
 # → 走系统 CA 校验
-_BUILTIN_CERT = ("F1:75:DF:A3:B5:0F:69:7A:BA:88:C8:23:80:5D:44:11:"
-                 "E2:2C:AE:83:33:C5:99:47:A2:01:60:AB:63:BA:7C:69")
+_BUILTIN_CERT = ("72:AF:BD:99:C6:57:16:D4:C9:F3:58:FA:78:44:AB:E9:"
+                 "C7:2C:D5:B9:7E:13:FF:56:F8:83:CC:67:FB:CB:44:C2")
 CERT_SHA256 = (_kit_get("cert_sha256")
                or (_BUILTIN_CERT if DEFAULT_SERVER == _BUILTIN_SERVER
                    else None))

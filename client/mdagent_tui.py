@@ -1141,7 +1141,9 @@ _COMMANDS = [
     ("/archive", "[name]", "archive project (default = current)"),
     ("/restore", "<name>", "restore the last archived project"),
     ("/root", "<dir>", "change the local open directory"),
-    ("/auto", "", "toggle write auto-approve (default off)"),
+    ("/auto", "", "toggle auto-approve of writes/execs (default off)"),
+    ("/fullpermission", "", "same as /auto: stop per-op approval prompts"),
+    ("/full", "", "short alias of /fullpermission"),
     ("/goal", "", "goal panel: current task sub-goals"),
     ("/apikey", "", "change LLM API key (opens provider console)"),
     ("/login", "", "sign in with username/password"),
@@ -1771,14 +1773,18 @@ class MdAgentApp(App):
                 self.add_sys("Usage: /restore <project>")
                 return
             asyncio.get_event_loop().create_task(self._restore_cmd(arg))
-        elif cmd == "auto":
+        elif cmd in ("auto", "full", "fullpermission"):
+            # /fullpermission(或 /full)= /auto 的别名:写/exec 不再逐笔询问
             if STATE["auto"]:
                 STATE["auto"] = False
-                self.add_sys("Write auto-approve: OFF")
+                self.add_sys("Auto-approve: OFF — every write/exec asks again"
+                             " (jail and wild-run gate stay on regardless)")
             else:
                 self.confirm = "auto_on"
-                self.add_sys("Turn on to skip per-write approval (still jailed to the open dir)."
-                             "Type yes to confirm, anything else cancels")
+                self.add_sys("Turn ON = writes and exec (like ls/python scripts) run"
+                             " without asking each time. Still jailed to the open dir;"
+                             " deletes always ask; MD engines still need supervise."
+                             " Type yes to confirm, anything else cancels")
         elif cmd == "resume":
             asyncio.get_event_loop().create_task(self._resume_cmd(arg))
         elif cmd == "policy":
@@ -1962,8 +1968,10 @@ class MdAgentApp(App):
         self.confirm = None
         if what == "auto_on":
             STATE["auto"] = text.strip().lower() == "yes"
-            self.add_sys("Write auto-approve: %s"
-                         % ("ON (careful!)" if STATE["auto"] else "OFF"))
+            self.add_sys("Auto-approve: %s"
+                         % ("ON — writes/execs run without asking (deletes still ask;"
+                            " /fullpermission or /auto to turn off)" if STATE["auto"]
+                            else "OFF (cancelled)"))
 
     # ---- /login 两步登录 ----
     def _login_step(self, text):
@@ -2144,7 +2152,7 @@ class MdAgentApp(App):
             Static(Text(("press y / n directly (preview focused · ↑↓ scrolls it)"
                          if long_prev else
                          "type y / n + Enter in the input (or click buttons)")
-                        + " · PgUp/PgDn scrolls the chat", style="#5F6B7A")),
+                        + " · /fullpermission stops these prompts", style="#5F6B7A")),
             Horizontal(Button("Approve (y)", id="btn-ok", compact=True),
                        Button("Deny (n)", id="btn-no", compact=True)),
             id="approval")

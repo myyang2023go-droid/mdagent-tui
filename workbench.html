@@ -3,114 +3,171 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>mdagent · Workbench</title>
+<title>MDᴱˣᵖ · 网页工作台(左对话 · 右进化图谱)</title>
 <style>
   :root{
-    --bg:#0f1115; --panel:#161b27; --line:#232a3b; --card:#1a2030;
-    --txt:#c9d1e0; --dim:#5f6b7a; --blue:#5686fe; --amber:#d29922;
-    --green:#3fb950; --red:#f85149; --code:#12151d;
+    --bg:#ffffff; --panel:#f5f6f7; --border:rgba(0,0,0,.1); --border-soft:#ebedf0;
+    --bar-bg:rgba(255,255,255,.85);
+    --text:#0f1115; --text-2:#61666b; --text-3:#81868c;
+    --brand:#4176e6; --brand-hover:#679efe; --brand-50:#edf3fe; --brand-100:#e4edfd;
+    --green:#22c55e; --green-100:#e6faed; --amber:#d97706; --amber-50:#fdf6ec;
+    --red:#dc2626; --code:#f6f8fa;
+    --shadow-1:0 2px 4px 0 rgba(0,0,0,.05);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);
-       font:15px/1.75 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-       height:100vh;display:flex;flex-direction:column}
-  a{color:var(--blue);text-decoration:none}
-  header{display:flex;align-items:center;gap:12px;padding:10px 16px;
-         border-bottom:1px solid var(--line);background:var(--panel)}
-  .logo{font-size:19px;font-weight:700;color:#eaf0fb;letter-spacing:1px}
-  .logo .exp{color:var(--blue)}
-  header .sp{flex:1}
-  select,button{background:var(--code);color:var(--txt);border:1px solid var(--line);
-       border-radius:8px;padding:6px 12px;font:14px/1.4 inherit;cursor:pointer}
-  button:hover{border-color:var(--blue)}
-  button.warn{color:var(--amber)}
-  #chat{flex:1;overflow-y:auto;padding:16px 18px}
-  .wrap{max-width:900px;margin:0 auto}
-  .msg-u{margin:14px 0 4px;color:#e6eaf2;font-weight:600;white-space:pre-wrap}
+  html,body{margin:0;height:100%;font-family:var(--font);background:var(--panel);color:var(--text);overflow:hidden}
+  a{color:var(--brand);text-decoration:none}
+
+  /* ── 顶栏(玻璃拟态,同本机 workbench) ── */
+  #bar{height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--bar-bg);
+       backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+       border-bottom:1px solid var(--border-soft);box-shadow:0 4px 16px rgba(0,0,0,.06);font-size:13px;position:relative;z-index:10}
+  #bar .logo{width:10px;height:10px;border-radius:50%;background:var(--brand);display:inline-block;margin-right:8px;
+             box-shadow:0 0 8px var(--brand),0 0 0 3px var(--brand-100)}
+  #bar b{font-size:14px;font-weight:700;
+         background:linear-gradient(92deg,var(--brand),#7c3aed 75%);
+         -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  #bar .hint{color:var(--text-3);font-size:12px;margin-left:4px}
+  #bar .spacer{margin-left:auto}
+  .navbtn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;border:1px solid transparent;
+          background:transparent;color:var(--text-2);font-size:12.5px;text-decoration:none;cursor:pointer;
+          transition:background .15s,color .15s;font-family:var(--font)}
+  .navbtn:hover{background:var(--brand-50);color:var(--brand)}
+  .navbtn.boxed{border:1px solid var(--border-soft);background:var(--bg)}
+  select.navbtn{padding:5px 8px}
+
+  /* ── 分栏 ── */
+  #wrap{display:flex;height:calc(100% - 48px)}
+  .pane{height:100%;position:relative}
+  #left{flex:0 0 46%;min-width:340px;display:flex;flex-direction:column;background:var(--bg)}
+  #right{flex:1 1 auto;background:var(--bg)}
+  iframe{width:100%;height:100%;border:0;background:#fff}
+  #drag{flex:0 0 8px;cursor:col-resize;background:transparent;position:relative;transition:background .15s}
+  #drag::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+               width:4px;height:28px;border-radius:2px;background:var(--border-soft);transition:background .15s}
+  #drag:hover{background:var(--brand-50)}
+  #drag:hover::after,#drag.active::after{background:var(--brand)}
+  .tag{position:absolute;top:10px;left:10px;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(2px);
+       color:var(--text-2);font-size:11.5px;padding:3px 10px 3px 8px;border-radius:8px;pointer-events:none;
+       border:1px solid var(--border-soft);border-left:3px solid var(--brand);box-shadow:var(--shadow-1)}
+  .tag.tag-dash{border-left-color:var(--green)}
+  #graph-hold{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+              color:var(--text-3);font-size:13px;background:var(--panel)}
+
+  /* ── 左栏:登录卡 ── */
+  #login{flex:1;display:flex;align-items:center;justify-content:center;padding:16px}
+  .lcard{background:var(--bg);border:1px solid var(--border-soft);border-radius:14px;
+         box-shadow:0 8px 30px rgba(0,0,0,.08);padding:26px 28px;width:min(380px,100%)}
+  .lcard h2{margin:0 0 6px;font-size:17px}
+  .lcard h2 .exp{background:linear-gradient(92deg,var(--brand),#7c3aed);
+                 -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lcard p{color:var(--text-3);font-size:13px;margin:4px 0 14px;line-height:1.6}
+  .lcard input{width:100%;margin:7px 0;padding:9px 12px;border-radius:8px;
+       border:1px solid var(--border-soft);background:var(--panel);color:var(--text);
+       font:14px/1.5 var(--font);outline:none}
+  .lcard input:focus{border-color:var(--brand);background:var(--bg)}
+  .lcard button{width:100%;margin-top:10px;background:var(--brand);color:#fff;
+       border:none;font-weight:600;padding:10px;border-radius:8px;cursor:pointer;font-family:var(--font)}
+  .lcard button:hover{background:var(--brand-hover)}
+  .err{color:var(--red);font-size:12.5px;margin-top:8px;display:none}
+  .note{margin-top:14px;color:var(--text-2);font-size:12px;border-left:3px solid var(--amber);
+        padding:6px 10px;background:var(--amber-50);border-radius:0 8px 8px 0;line-height:1.6}
+
+  /* ── 左栏:对话 ── */
+  #main{display:none;flex:1;flex-direction:column;min-height:0}
+  #chat{flex:1;overflow-y:auto;padding:14px 16px 6px}
+  .msg-u{margin:12px 0 2px;font-weight:600;white-space:pre-wrap;word-break:break-word}
   .msg-u::before{content:"❯ ";color:var(--amber);font-weight:700}
-  .msg-a{margin:6px 0 14px;padding-left:14px;border-left:2px solid var(--line);
-         white-space:pre-wrap;word-break:break-word}
-  .msg-a code{background:var(--code);border:1px solid var(--line);border-radius:5px;
-              padding:1px 6px;font-size:13px;color:var(--amber)}
-  .msg-a pre{background:var(--code);border:1px solid var(--line);border-radius:8px;
+  .msg-a{margin:4px 0 14px;padding-left:12px;border-left:2px solid var(--border-soft);
+         white-space:pre-wrap;word-break:break-word;line-height:1.7}
+  .msg-a code{background:var(--code);border:1px solid var(--border-soft);border-radius:5px;
+              padding:1px 6px;font-size:12.5px;color:var(--amber)}
+  .msg-a pre{background:var(--code);border:1px solid var(--border-soft);border-radius:8px;
              padding:10px 12px;overflow-x:auto}
-  .msg-a pre code{border:none;background:none;color:#9fb0c8}
-  .msg-a h1,.msg-a h2,.msg-a h3{color:#eaf0fb;margin:10px 0 4px;font-size:16px}
-  .msg-a b,.msg-a strong{color:#e6eaf2}
-  .think{margin:2px 0 6px;color:var(--dim);font-style:italic;font-size:13.5px;
-         border-left:2px solid #2a3142;padding-left:12px;max-height:9em;
-         overflow:hidden;position:relative;cursor:pointer}
+  .msg-a pre code{border:none;background:none;color:#445}
+  .msg-a h3{margin:10px 0 4px;font-size:14.5px}
+  .msg-a b{color:var(--text)}
+  .think{margin:2px 0 6px;color:var(--text-3);font-style:italic;font-size:12.5px;
+         border-left:2px solid var(--border-soft);padding-left:10px;max-height:8.5em;
+         overflow:hidden;cursor:pointer}
   .think.open{max-height:none}
-  .think::after{content:"✶ thinking (点击展开)";font-size:12px;color:#3a4152}
+  .think::after{content:"✶ thinking(点击展开)";font-size:11.5px;color:#b6bbc1;display:block}
   .think.open::after{content:"✶ thinking"}
-  .sys{color:var(--dim);font-size:13px;margin:4px 0}
-  .q{color:var(--amber);margin:8px 0;white-space:pre-wrap}
+  .sys{color:var(--text-3);font-size:12px;margin:4px 0}
+  .q{color:var(--amber);margin:8px 0;white-space:pre-wrap;font-size:13px}
   .q::before{content:"⏳ "}
-  .run{color:var(--amber);font-size:13.5px;margin:6px 0}
-  .copy{float:right;color:var(--dim);font-size:12px;cursor:pointer;border:1px solid var(--line);
-        border-radius:6px;padding:0 8px}
-  .copy:hover{color:var(--txt);border-color:var(--blue)}
-  footer{border-top:1px solid var(--line);background:var(--panel);padding:10px 16px}
-  .inrow{max-width:900px;margin:0 auto;display:flex;gap:10px}
-  textarea{flex:1;background:var(--code);color:#e6eaf2;border:1px solid var(--line);
-           border-radius:10px;padding:10px 14px;font:15px/1.5 inherit;resize:none;
-           height:52px;outline:none}
-  textarea:focus{border-color:var(--amber)}
-  #st{max-width:900px;margin:8px auto 0;color:var(--dim);font-size:12.5px}
-  #st .on{color:var(--green)} #st .off{color:var(--red)}
-  #login{flex:1;display:flex;align-items:center;justify-content:center}
-  .lcard{background:var(--card);border:1px solid var(--line);border-radius:14px;
-         padding:28px 30px;width:min(400px,92vw)}
-  .lcard h2{margin:0 0 6px;color:#eaf0fb}
-  .lcard p{color:var(--dim);font-size:13.5px;margin:4px 0 14px}
-  .lcard input{width:100%;margin:8px 0;padding:9px 12px;border-radius:8px;
-       border:1px solid var(--line);background:var(--code);color:#e6eaf2;
-       font:14px/1.5 inherit;outline:none}
-  .lcard input:focus{border-color:var(--blue)}
-  .lcard button{width:100%;margin-top:12px;background:var(--blue);color:#fff;
-       border:none;font-weight:600;padding:10px}
-  .err{color:var(--red);font-size:13px;margin-top:8px;display:none}
-  .note{margin-top:14px;color:var(--dim);font-size:12.5px;border-left:3px solid var(--amber);
-        padding:6px 10px;background:rgba(210,153,34,.06);border-radius:0 8px 8px 0}
+  .run{color:var(--amber);font-size:12.5px;margin:6px 0}
+  .copy{float:right;color:var(--text-3);font-size:11.5px;cursor:pointer;border:1px solid var(--border-soft);
+        border-radius:6px;padding:0 8px;background:var(--bg)}
+  .copy:hover{color:var(--brand);border-color:var(--brand)}
   .spin{display:inline-block;animation:r 1s steps(8) infinite}
   @keyframes r{to{transform:rotate(360deg)}}
+
+  #composer{display:flex;gap:8px;padding:10px 14px 4px;border-top:1px solid var(--border-soft)}
+  textarea{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border-soft);
+           border-radius:10px;padding:10px 13px;font:13.5px/1.5 var(--font);resize:none;
+           height:50px;outline:none}
+  textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-50)}
+  button.act{padding:0 18px;border-radius:10px;border:0;background:var(--brand);color:#fff;
+             font:600 13.5px var(--font);cursor:pointer}
+  button.act:hover{background:var(--brand-hover)}
+  button.act.warn{background:var(--amber-50);color:var(--amber);border:1px solid #f3d9ae}
+  #st{padding:4px 16px 10px;color:var(--text-3);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #st .on{color:var(--green)} #st .off{color:var(--red)}
+
+  @media (max-width:860px){
+    #right,#drag{display:none}
+    #left{flex:1 1 auto;min-width:0}
+    #bar .hint{display:none}
+  }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">MD<span class="exp">ᴱˣᵖ</span> Workbench</div>
-  <select id="proj" title="切换项目(上下文独立)"></select>
-  <button id="newproj" title="新开一个项目会话">+ 项目</button>
-  <div class="sp"></div>
-  <a href="/mdagent/evolution.html" target="_blank">进化图谱 ↗</a>
-  <a href="/mdagent/register.html" target="_blank">注册 ↗</a>
-  <button id="logout" class="warn">退出</button>
-</header>
-
-<div id="login">
-  <div class="lcard">
-    <h2>MD<span style="color:var(--blue)">ᴱˣᵖ</span> 智能体 · 网页工作台</h2>
-    <p>脑子在云端,浏览器即用。对话 / 项目记忆 / 仿真编排建议。</p>
-    <input id="lu" placeholder="用户名" autocomplete="username">
-    <input id="lp" type="password" placeholder="密码" autocomplete="current-password">
-    <button id="loginbtn">登录</button>
-    <div class="err" id="lerr"></div>
-    <div class="note">网页版可对话与用云端能力;要读写<b>你电脑上的文件</b>
-      (建模/跑模拟)请配合终端客户端 <code style="color:var(--amber)">mdagent</code>。</div>
-  </div>
+<div id="bar">
+  <span style="display:flex;align-items:center"><span class="logo"></span><b>MDᴱˣᵖ · 网页工作台</b></span>
+  <span class="hint">左:云端智能体对话(流式) · 右:共享进化图谱</span>
+  <span class="spacer"></span>
+  <select id="proj" class="navbtn boxed" title="切换项目(上下文独立,自动回放云端历史)"></select>
+  <button id="newproj" class="navbtn boxed" title="新开一个项目会话">+ 项目</button>
+  <a class="navbtn boxed" href="/mdagent/evolution.html" target="_blank">🧬 进化图谱 ↗</a>
+  <a class="navbtn boxed" href="/mdboard/" target="_blank">📊 看板 ↗</a>
+  <a class="navbtn boxed" href="/mdagent/register.html" target="_blank">注册 ↗</a>
+  <button id="logout" class="navbtn boxed">退出</button>
 </div>
 
-<div id="main" style="display:none;flex:1;flex-direction:column;min-height:0">
-  <div id="chat"><div class="wrap" id="feed"></div></div>
-  <footer>
-    <div class="inrow">
-      <textarea id="inp" placeholder="发消息 · Enter 发送 · Shift+Enter 换行 · 任务跑着时输入自动排队"></textarea>
-      <button id="send">发送</button>
-      <button id="escbtn" class="warn" title="温和打断当前任务(已完成步骤不丢)">⏹ 打断</button>
+<div id="wrap">
+  <div class="pane" id="left">
+    <div class="tag">💬 云端智能体 · 对话</div>
+    <div id="login">
+      <div class="lcard">
+        <h2><span class="exp">MDᴱˣᵖ</span> 智能体 · 网页工作台</h2>
+        <p>脑子在云端,浏览器即用:登录后直接对话,右侧同步展示共享进化图谱。</p>
+        <input id="lu" placeholder="用户名" autocomplete="username">
+        <input id="lp" type="password" placeholder="密码" autocomplete="current-password">
+        <button id="loginbtn">登录</button>
+        <div class="err" id="lerr"></div>
+        <div class="note">网页版可对话、看图谱、查项目记忆;要读写<b>你电脑上的文件</b>
+          (建模/跑模拟)请配合终端客户端 <b>mdagent</b>(文件桥 + 逐笔批准)。</div>
+      </div>
     </div>
-    <div id="st">…</div>
-  </footer>
+    <div id="main">
+      <div id="chat"><div id="feed"></div></div>
+      <div id="composer">
+        <textarea id="inp" placeholder="发消息 · Enter 发送 · Shift+Enter 换行 · 任务跑着时输入自动排队"></textarea>
+        <button id="send" class="act">发送</button>
+        <button id="escbtn" class="act warn" title="温和打断当前任务(已完成步骤不丢)">⏹ 打断</button>
+      </div>
+      <div id="st">…</div>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div class="pane" id="right">
+    <div class="tag tag-dash">🧬 共享进化图谱 · 全员经验蒸馏</div>
+    <div id="graph-hold">登录后此处展示进化图谱(同源自动带 token,无需再贴)</div>
+    <iframe id="graph-frame"></iframe>
+  </div>
 </div>
 
 <script>
@@ -212,7 +269,7 @@ function send(text){
      })
      .catch(function(e){ run.remove(); sys('Poll failed: ' + e.message);
                          finish(); drain(); });
-   }
+  }
 }
 function finish(){ busy = false; jobId = null; clearTimeout(pollTimer); }
 function drain(){
@@ -293,6 +350,9 @@ h('#logout').onclick = function(){
 function enterApp(){
   h('#login').style.display = 'none';
   h('#main').style.display = 'flex';
+  // 右栏图谱:同源 iframe 与本页共享 sessionStorage,进化图谱自动拿到 token
+  h('#graph-hold').style.display = 'none';
+  h('#graph-frame').src = '/mdagent/evolution.html';
   loadProjects().then(function(){ replay(project); });
   h('#inp').focus();
 }
@@ -325,6 +385,30 @@ if (tok){
     .then(function(){ enterApp(); })
     .catch(function(){ sessionStorage.removeItem('mda_token'); tok=''; });
 }
+
+// 可拖拽分隔条(位置记忆,同本机 workbench)
+(function(){
+  var drag = h('#drag'), left = h('#left'), wrap = h('#wrap');
+  var savedPct = +localStorage.getItem('wb-split');
+  if (savedPct) left.style.flex = '0 0 ' + Math.min(70, Math.max(30, savedPct)) + '%';
+  var dragging = false;
+  drag.addEventListener('mousedown', function(){
+    dragging = true; drag.classList.add('active');
+    document.body.style.userSelect = 'none';
+    h('#graph-frame').style.pointerEvents = 'none';
+  });
+  window.addEventListener('mouseup', function(){
+    dragging = false; drag.classList.remove('active');
+    document.body.style.userSelect = '';
+    h('#graph-frame').style.pointerEvents = 'auto';
+  });
+  window.addEventListener('mousemove', function(e){
+    if (!dragging) return;
+    var pct = Math.min(70, Math.max(30, e.clientX / wrap.clientWidth * 100));
+    left.style.flex = '0 0 ' + pct + '%';
+    localStorage.setItem('wb-split', pct.toFixed(1));
+  });
+})();
 </script>
 </body>
 </html>

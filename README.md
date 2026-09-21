@@ -101,6 +101,12 @@ curl -fsSL https://raw.githubusercontent.com/myyang2023go-droid/mdagent-tui/main
 先在开放目录建分类任务文件夹,并在其中维护任务级 `mdagent.md`(目标/参数/进度),
 续做时先读它再继续。
 
+## 每次启动 = 全新会话
+
+直接 `mdagent` 打开的是**全新干净会话**(不回放旧对话,云端上下文独立);
+续做旧项目用 `--resume` / `/project`,载入时会**自动附带该项目任务文件夹里的
+`mdagent.md`(目标/参数/进度),每轮注入。
+
 ## 续做旧项目(同 Claude Code 的 --resume)
 
 ```bash

@@ -284,19 +284,31 @@ STATE = {
 }
 
 
-def _read_policy():
-    """读开放目录根下的 mdagent.md(同 Claude Code 的 CLAUDE.md):
-    每轮作为 policy 字段随消息上送,云端标记为策略注入,不进对话历史。"""
+def _read_policy(project=""):
+    """读开放目录根下的 mdagent.md(同 Claude Code 的 CLAUDE.md,全局策略);
+    指定项目时再附带其任务文件夹下的 mdagent.md(任务档:目标/参数/进度,
+    /project 续做的记忆锚点)。每轮作为 policy 字段随消息上送,云端标记为
+    策略注入,不进对话历史。"""
     j = STATE.get("jail")
     if not j:
         return ""
+    parts = []
     try:
         p = j.root / "mdagent.md"
-        if not p.is_file():
-            return ""
-        return p.read_text(encoding="utf-8", errors="replace")[:12000]
+        if p.is_file():
+            parts.append(p.read_text(encoding="utf-8", errors="replace")[:12000])
     except Exception:
-        return ""
+        pass
+    if project:
+        try:
+            tp = j.root / project / "mdagent.md"
+            if tp.is_file():
+                parts.append("[项目任务档 %s/mdagent.md]\n%s" % (
+                    project,
+                    tp.read_text(encoding="utf-8", errors="replace")[:8000]))
+        except Exception:
+            pass
+    return "\n\n".join(parts)[:12000]
 
 
 def _alt_scroll(on):
@@ -953,6 +965,7 @@ def _log_op(op, result):
 # 目标/文件操作面板收进 Ctrl+G 侧坞(默认隐藏,功能一个不丢)。
 _APP = None
 _PROJECT = "default"
+_EXPLICIT_PROJECT = False   # --project/--resume/-c:启动即载入该项目(回放+任务档)
 
 _SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -1390,8 +1403,13 @@ class MdAgentApp(App):
         self.set_interval(0.12, self._spin)
         self.set_interval(2, self._tick)
         self.set_interval(3, self._poll_goal)
-        asyncio.get_event_loop().create_task(self._load_history(_PROJECT))
-        STATE["policy"] = _read_policy()
+        if _EXPLICIT_PROJECT:
+            asyncio.get_event_loop().create_task(self._load_history(_PROJECT))
+        else:
+            self.add_sys("Fresh session '%s' — clean start, own cloud context." % _PROJECT)
+            self.add_sys("/resume or /project <name> to continue a past project"
+                         " (its history + task mdagent.md come with it)")
+        STATE["policy"] = _read_policy(_PROJECT if _EXPLICIT_PROJECT else "")
         if STATE["policy"]:
             self.add_sys("Local policy loaded: mdagent.md (%d chars, attached every turn,"
                          " never stored in chat history; /policy to view)" % len(STATE["policy"]))
@@ -1691,7 +1709,7 @@ class MdAgentApp(App):
                 _save_cfg(cfg["server"], cfg["token"], str(j.root))
                 cfg["root"] = str(j.root)
             self.add_sys("Open dir switched: %s" % j.root)
-            STATE["policy"] = _read_policy()
+            STATE["policy"] = _read_policy(_PROJECT)
             self.add_sys("Local policy mdagent.md: %s" % (
                 "%d chars loaded" % len(STATE["policy"]) if STATE["policy"]
                 else "none in this dir (drop one in to enable)"))
@@ -1703,7 +1721,15 @@ class MdAgentApp(App):
                 self.add_sys("Usage: /project <name>")
                 return
             _PROJECT = arg
+            STATE["policy"] = _read_policy(arg)
+            has_task_md = bool(STATE["jail"] and
+                               (STATE["jail"].root / arg / "mdagent.md").is_file())
             self.add_sys("Project: %s (own context), replaying cloud history…" % arg)
+            self.add_sys("Task mdagent.md %s" % (
+                "attached (%s/mdagent.md → goal/params/progress injected every turn)"
+                % arg if has_task_md else
+                "not found at %s — fine if the task folder uses another name"
+                % (STATE["jail"].root / arg / "mdagent.md" if STATE["jail"] else arg)))
             asyncio.get_event_loop().create_task(self._load_history(arg))
         elif cmd == "archive":
             target = arg or _PROJECT
@@ -1724,10 +1750,12 @@ class MdAgentApp(App):
         elif cmd == "resume":
             asyncio.get_event_loop().create_task(self._resume_cmd(arg))
         elif cmd == "policy":
-            STATE["policy"] = _read_policy()
+            STATE["policy"] = _read_policy(_PROJECT)
             if STATE["policy"]:
-                self.add_sys("mdagent.md (%s) %d chars total, attached every turn. First 600 chars:\n%s"
-                             % (STATE["jail"].root / "mdagent.md",
+                self.add_sys("mdagent.md %s %d chars total, attached every turn. First 600 chars:\n%s"
+                             % ("(+ task %s/mdagent.md)" % _PROJECT
+                                if (STATE["jail"].root / _PROJECT / "mdagent.md").is_file()
+                                else "(root)",
                                 len(STATE["policy"]), STATE["policy"][:600]))
             else:
                 self.add_sys("No mdagent.md in the open dir; create one to enable: %s"
@@ -1963,7 +1991,13 @@ class MdAgentApp(App):
             self.add_sys("No project matched '%s', try /resume again" % text)
             return
         _PROJECT = name
+        STATE["policy"] = _read_policy(name)
+        has_task_md = bool(STATE["jail"] and
+                           (STATE["jail"].root / name / "mdagent.md").is_file())
         self.add_sys("Resumed project '%s', replaying history…" % name)
+        self.add_sys("Task mdagent.md %s" % (
+            "attached (%s/mdagent.md → goal/params/progress injected every turn)" % name
+            if has_task_md else "not found in the open dir (task folder may use another name)"))
         asyncio.get_event_loop().create_task(self._load_history(name))
 
     def _resume_step(self, text):
@@ -2242,6 +2276,15 @@ def main():
             sys.exit("\n[!] No interactive input (piped run); use --project <name> instead")
         except Exception as e:
             print("(failed to fetch projects: %s, staying on default)" % _err_text(e))
+    # 默认启动 = 全新会话:干净界面、独立云端上下文,不回放旧对话;
+    # 显式 --project/--resume/-c 才载入既有项目(回放 + 任务档 mdagent.md)
+    global _EXPLICIT_PROJECT
+    if args.project or args.resume or args.cont:
+        _EXPLICIT_PROJECT = True
+    else:
+        _PROJECT = time.strftime("s%m%d-%H%M")
+        print("Fresh session '%s' (clean start; /resume or /project <name> continues"
+              " a past project)" % _PROJECT)
     threading.Thread(target=_bridge_loop, daemon=True).start()
     try:
         MdAgentApp().run()

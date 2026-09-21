@@ -365,7 +365,7 @@ function doLogin(){
   fetch(API + '/v1/login', {method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({username: h('#lu').value.trim(),
-                            password: h('#lp').value})})
+                            password: h('#lp').value.replace(/^\s+|\s+$/g,'')})})
     .then(function(r){ return r.json().then(function(j){
         if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status)); return j; }); })
     .then(function(j){

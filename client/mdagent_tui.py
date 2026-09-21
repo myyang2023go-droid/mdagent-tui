@@ -563,6 +563,14 @@ def _do_grep(args):
             "truncated": len(out) >= mx}
 
 
+def _deny_or_timeout(req, kind):
+    """批准未通过的原因:超时(没人答)≠ 用户拒绝,分开说清。"""
+    if req.get("decision") is None:
+        return ("approval timed out after 100s (no answer) — %s NOT executed;"
+                " ask the agent to retry (or /auto to skip approvals)" % kind)
+    return "user denied this %s" % kind
+
+
 def _do_edit(oid, args):
     """精确改一处:old 须唯一,批准卡带前后对比。对齐 Claude Code Edit 语义。"""
     old, new = args.get("old"), args.get("new")
@@ -604,7 +612,7 @@ def _do_edit(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("user denied this edit (or 100s approval timeout)")
+            raise PermissionError(_deny_or_timeout(req, "edit"))
         fd = os.open(str(p), os.O_WRONLY | os.O_CREAT, 0o644)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             if not _fd_under(f.fileno(), jail.root):
@@ -640,7 +648,7 @@ def _do_write(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("user denied this write (or 100s approval timeout)")
+            raise PermissionError(_deny_or_timeout(req, "write"))
         p.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(p), os.O_WRONLY | os.O_CREAT, 0o644)  # 回验后再 truncate
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -681,7 +689,7 @@ def _do_delete(oid, args):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("user denied this delete (or 100s approval timeout)")
+            raise PermissionError(_deny_or_timeout(req, "delete"))
         if p.is_dir() and not p.is_symlink():
             p.rmdir()
         else:
@@ -785,7 +793,7 @@ def _do_exec_direct(oid, args, cmd):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("user denied this exec (or 100s approval timeout)")
+            raise PermissionError(_deny_or_timeout(req, "exec"))
         lf = open(jail.root / log_rel, "w", encoding="utf-8")
         lf.write("$ %s\n\n" % cmd)
         lf.flush()
@@ -856,7 +864,7 @@ def _do_exec_gate(oid, args, cmd):
     try:
         req["event"].wait(100)  # 须 < 云端 CALL_TIMEOUT 110s
         if req["decision"] != "approve":
-            raise PermissionError("user denied this exec (or 100s approval timeout)")
+            raise PermissionError(_deny_or_timeout(req, "exec"))
         # op id 净化:云端字符串不当文件名成分(复审 P2-7)
         safe_oid = re.sub(r"[^A-Za-z0-9_-]", "x", oid[:12]) or "op"
         req_p = "/tmp/mdrun_req_%s.json" % safe_oid
@@ -1127,6 +1135,7 @@ class ApprovalCard(Horizontal):
 # (命令, 参数, 说明) —— / 菜单与 /help 共用的唯一事实源
 _COMMANDS = [
     ("/project", "<name>", "switch project (own context, history replayed)"),
+    ("/clear", "", "clear the screen (cloud history untouched)"),
     ("/resume", "[n]", "resume a past project (by recent activity)"),
     ("/policy", "", "show/reload local policy mdagent.md"),
     ("/archive", "[name]", "archive project (default = current)"),
@@ -1253,6 +1262,9 @@ class StatusBar(Static):
             frame = _SPIN[getattr(app, "_spin_i", 0) % len(_SPIN)]
             t.append(" %s " % frame, style="#D29922")
             t.append(app.phase or "Thinking…", style="#D29922")
+            bs = getattr(app, "_busy_since", None)
+            if bs:
+                t.append(" %ds" % int(time.time() - bs), style="#D29922")
             t.append("  ·  ", style="#3A4152")
         else:
             t.append(" ● ", style="#3FB950" if online else "#F85149")
@@ -1312,6 +1324,7 @@ class MdAgentApp(App):
         padding: 0 1; margin: 0 2 0 2; height: auto;
     }
     #approval Static { padding: 0 1; }
+    #approval .prev { height: auto; max-height: 12; padding: 0 1; }
     #cmd-menu {
         display: none; height: auto; margin: 0 2;
         padding: 0 1; border: round #3A4152; background: #12151D;
@@ -1368,6 +1381,9 @@ class MdAgentApp(App):
         self.resume = None           # /resume 待选:{"items":[…]}
         self._job_id = None          # 当前轮询中的 job(ESC 打断用)
         self.approval = None         # (oid, req)
+        self.approval_card = None    # 挂着的批准卡(倒计时刷新用)
+        self.approval_deadline = 0.0
+        self._busy_since = None      # 思考/工具计时(状态条显示已耗时)
         self.stream_card = None
         self._goal_mtime = None
         self._cmd_open = False       # / 命令菜单
@@ -1405,7 +1421,7 @@ class MdAgentApp(App):
             Banner(STATE["cfg"]["server"], str(STATE["jail"].root))))
         self.set_interval(0.3, self._check_pending)
         self.set_interval(0.12, self._spin)
-        self.set_interval(2, self._tick)
+        self.set_interval(1, self._tick)
         self.set_interval(3, self._poll_goal)
         if _EXPLICIT_PROJECT:
             asyncio.get_event_loop().create_task(self._load_history(_PROJECT))
@@ -1602,6 +1618,7 @@ class MdAgentApp(App):
     async def _send(self, text):
         loop = asyncio.get_event_loop()
         self.busy = True
+        self._busy_since = time.time()
         self.phase = "Submitting…"
         card = StreamCard()
         await self._mount(card)
@@ -1666,6 +1683,7 @@ class MdAgentApp(App):
             self.stream_card = None
         self.phase = ""
         self.busy = False
+        self._busy_since = None
         self._job_id = None
 
     async def _load_history(self, project):
@@ -1735,6 +1753,16 @@ class MdAgentApp(App):
                 "not found at %s — fine if the task folder uses another name"
                 % (STATE["jail"].root / arg / "mdagent.md" if STATE["jail"] else arg)))
             asyncio.get_event_loop().create_task(self._load_history(arg))
+        elif cmd == "clear":
+            # 只清屏:云端历史/上下文不动(/copy 的滚动账也保留)
+            chat = self.query_one("#chat", VerticalScroll)
+            for w in list(chat.children):
+                w.remove()
+            asyncio.get_event_loop().create_task(self._mount(
+                Banner(STATE["cfg"]["server"] if STATE["cfg"] else "",
+                       str(STATE["jail"].root) if STATE["jail"] else "?")))
+            self.add_sys("Screen cleared (cloud history and context untouched;"
+                         " /resume to reload)")
         elif cmd == "archive":
             target = arg or _PROJECT
             asyncio.get_event_loop().create_task(self._archive_cmd(target))
@@ -2097,28 +2125,42 @@ class MdAgentApp(App):
         _, req = item
         if req.get("kind") == "delete":
             head = "⚠ Cloud agent requests DELETE (irreversible): %s" % req["path"]
-            title = "Delete approval · auto-deny in 100s"
+            title = "Delete approval"
         elif req.get("kind") == "exec":
             head = "⚠ Cloud agent requests EXEC: %s" % req["path"]
-            title = "Exec approval · auto-deny in 100s"
+            title = "Exec approval"
         else:
             head = "⚠ Cloud agent requests WRITE: %s (%d bytes)" % (req["path"],
                                                          req["bytes"])
-            title = "Write approval · auto-deny in 100s"
+            title = "Write approval"
+        # 预览全文不截断:包进可滚动区(限高),长命令也能看全
+        long_prev = len(str(req["preview"]).split("\n")) > 10
+        prev = VerticalScroll(
+            Static(Text("\n".join(str(req["preview"]).split("\n")),
+                        style="#C9D1E0")), classes="prev")
         card = ApprovalCard(
             Static(Text(head, style="bold #E6B450")),
-            Static(Text("\n".join("  " + l for l in
-                                  str(req["preview"]).split("\n")[:6]),
-                        style="#C9D1E0")),
+            prev,
+            Static(Text(("press y / n directly (preview focused · ↑↓ scrolls it)"
+                         if long_prev else
+                         "type y / n + Enter in the input (or click buttons)")
+                        + " · PgUp/PgDn scrolls the chat", style="#5F6B7A")),
             Horizontal(Button("Approve (y)", id="btn-ok", compact=True),
                        Button("Deny (n)", id="btn-no", compact=True)),
             id="approval")
-        card.border_title = title
+        card.border_title = "%s · auto-deny in 100s" % title
+        self.approval_card = card
+        self.approval_deadline = req["ts"] + 100
         self.query_one("#approval-slot").mount(card)
+        if long_prev:
+            prev.focus()   # 长预览拿焦点:y/n 单键即答,↑↓ 滚预览
+        else:
+            self.query_one("#composer", Input).focus()
 
     def _resolve_approval(self, ok):
         ap = self.approval
         self.approval = None
+        self.approval_card = None
         if not ap:
             return
         _, req = ap
@@ -2173,6 +2215,12 @@ class MdAgentApp(App):
                     None, functools.partial(_http, "GET", "/v1/usage", None, 10))
             except Exception:
                 pass
+        # 批准卡倒计时:标题实时刷新剩余秒数(超时≠拒绝,要让用户看见 deadline)
+        if self.approval_card is not None and self.approval:
+            left = int(self.approval_deadline - time.time())
+            if left > 0:
+                self.approval_card.border_title = re.sub(
+                    r"\d+s$", "%ds" % left, self.approval_card.border_title or "")
         self.query_one("#status", StatusBar).refresh()
 
 

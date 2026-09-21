@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mdagent · Workbench</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161b27; --line:#232a3b; --card:#1a2030;
+    --txt:#c9d1e0; --dim:#5f6b7a; --blue:#5686fe; --amber:#d29922;
+    --green:#3fb950; --red:#f85149; --code:#12151d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.75 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+       height:100vh;display:flex;flex-direction:column}
+  a{color:var(--blue);text-decoration:none}
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;
+         border-bottom:1px solid var(--line);background:var(--panel)}
+  .logo{font-size:19px;font-weight:700;color:#eaf0fb;letter-spacing:1px}
+  .logo .exp{color:var(--blue)}
+  header .sp{flex:1}
+  select,button{background:var(--code);color:var(--txt);border:1px solid var(--line);
+       border-radius:8px;padding:6px 12px;font:14px/1.4 inherit;cursor:pointer}
+  button:hover{border-color:var(--blue)}
+  button.warn{color:var(--amber)}
+  #chat{flex:1;overflow-y:auto;padding:16px 18px}
+  .wrap{max-width:900px;margin:0 auto}
+  .msg-u{margin:14px 0 4px;color:#e6eaf2;font-weight:600;white-space:pre-wrap}
+  .msg-u::before{content:"❯ ";color:var(--amber);font-weight:700}
+  .msg-a{margin:6px 0 14px;padding-left:14px;border-left:2px solid var(--line);
+         white-space:pre-wrap;word-break:break-word}
+  .msg-a code{background:var(--code);border:1px solid var(--line);border-radius:5px;
+              padding:1px 6px;font-size:13px;color:var(--amber)}
+  .msg-a pre{background:var(--code);border:1px solid var(--line);border-radius:8px;
+             padding:10px 12px;overflow-x:auto}
+  .msg-a pre code{border:none;background:none;color:#9fb0c8}
+  .msg-a h1,.msg-a h2,.msg-a h3{color:#eaf0fb;margin:10px 0 4px;font-size:16px}
+  .msg-a b,.msg-a strong{color:#e6eaf2}
+  .think{margin:2px 0 6px;color:var(--dim);font-style:italic;font-size:13.5px;
+         border-left:2px solid #2a3142;padding-left:12px;max-height:9em;
+         overflow:hidden;position:relative;cursor:pointer}
+  .think.open{max-height:none}
+  .think::after{content:"✶ thinking (点击展开)";font-size:12px;color:#3a4152}
+  .think.open::after{content:"✶ thinking"}
+  .sys{color:var(--dim);font-size:13px;margin:4px 0}
+  .q{color:var(--amber);margin:8px 0;white-space:pre-wrap}
+  .q::before{content:"⏳ "}
+  .run{color:var(--amber);font-size:13.5px;margin:6px 0}
+  .copy{float:right;color:var(--dim);font-size:12px;cursor:pointer;border:1px solid var(--line);
+        border-radius:6px;padding:0 8px}
+  .copy:hover{color:var(--txt);border-color:var(--blue)}
+  footer{border-top:1px solid var(--line);background:var(--panel);padding:10px 16px}
+  .inrow{max-width:900px;margin:0 auto;display:flex;gap:10px}
+  textarea{flex:1;background:var(--code);color:#e6eaf2;border:1px solid var(--line);
+           border-radius:10px;padding:10px 14px;font:15px/1.5 inherit;resize:none;
+           height:52px;outline:none}
+  textarea:focus{border-color:var(--amber)}
+  #st{max-width:900px;margin:8px auto 0;color:var(--dim);font-size:12.5px}
+  #st .on{color:var(--green)} #st .off{color:var(--red)}
+  #login{flex:1;display:flex;align-items:center;justify-content:center}
+  .lcard{background:var(--card);border:1px solid var(--line);border-radius:14px;
+         padding:28px 30px;width:min(400px,92vw)}
+  .lcard h2{margin:0 0 6px;color:#eaf0fb}
+  .lcard p{color:var(--dim);font-size:13.5px;margin:4px 0 14px}
+  .lcard input{width:100%;margin:8px 0;padding:9px 12px;border-radius:8px;
+       border:1px solid var(--line);background:var(--code);color:#e6eaf2;
+       font:14px/1.5 inherit;outline:none}
+  .lcard input:focus{border-color:var(--blue)}
+  .lcard button{width:100%;margin-top:12px;background:var(--blue);color:#fff;
+       border:none;font-weight:600;padding:10px}
+  .err{color:var(--red);font-size:13px;margin-top:8px;display:none}
+  .note{margin-top:14px;color:var(--dim);font-size:12.5px;border-left:3px solid var(--amber);
+        padding:6px 10px;background:rgba(210,153,34,.06);border-radius:0 8px 8px 0}
+  .spin{display:inline-block;animation:r 1s steps(8) infinite}
+  @keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MD<span class="exp">ᴱˣᵖ</span> Workbench</div>
+  <select id="proj" title="切换项目(上下文独立)"></select>
+  <button id="newproj" title="新开一个项目会话">+ 项目</button>
+  <div class="sp"></div>
+  <a href="/mdagent/evolution.html" target="_blank">进化图谱 ↗</a>
+  <a href="/mdagent/register.html" target="_blank">注册 ↗</a>
+  <button id="logout" class="warn">退出</button>
+</header>
+
+<div id="login">
+  <div class="lcard">
+    <h2>MD<span style="color:var(--blue)">ᴱˣᵖ</span> 智能体 · 网页工作台</h2>
+    <p>脑子在云端,浏览器即用。对话 / 项目记忆 / 仿真编排建议。</p>
+    <input id="lu" placeholder="用户名" autocomplete="username">
+    <input id="lp" type="password" placeholder="密码" autocomplete="current-password">
+    <button id="loginbtn">登录</button>
+    <div class="err" id="lerr"></div>
+    <div class="note">网页版可对话与用云端能力;要读写<b>你电脑上的文件</b>
+      (建模/跑模拟)请配合终端客户端 <code style="color:var(--amber)">mdagent</code>。</div>
+  </div>
+</div>
+
+<div id="main" style="display:none;flex:1;flex-direction:column;min-height:0">
+  <div id="chat"><div class="wrap" id="feed"></div></div>
+  <footer>
+    <div class="inrow">
+      <textarea id="inp" placeholder="发消息 · Enter 发送 · Shift+Enter 换行 · 任务跑着时输入自动排队"></textarea>
+      <button id="send">发送</button>
+      <button id="escbtn" class="warn" title="温和打断当前任务(已完成步骤不丢)">⏹ 打断</button>
+    </div>
+    <div id="st">…</div>
+  </footer>
+</div>
+
+<script>
+var API = location.origin + '/mdagent';
+var tok = sessionStorage.getItem('mda_token') || '';
+var user = sessionStorage.getItem('mda_user') || '';
+var project = sessionStorage.getItem('mda_proj') || '';
+var busy = false, jobId = null, busySince = 0, queue = [], pollTimer = null;
+
+function h(sel){ return document.querySelector(sel); }
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function md(s){
+  s = esc(s);
+  s = s.replace(/```([\w.-]*)\n([\s\S]*?)```/g,
+      function(_,l,c){ return '<pre><code>'+c+'</code></pre>'; });
+  s = s.replace(/^###?\s*(.+)$/gm,'<h3>$1</h3>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
+  s = s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s = s.replace(/^- (.+)$/gm,'• $1');
+  return s;
+}
+function add(cls, html){
+  var d = document.createElement('div');
+  d.className = cls; d.innerHTML = html;
+  var feed = h('#feed');
+  feed.appendChild(d);
+  h('#chat').scrollTop = h('#chat').scrollHeight;
+  return d;
+}
+function addAgent(text){
+  var d = add('msg-a', md(text) +
+    '<span class="copy" onclick="navigator.clipboard.writeText(this.parentElement.__t).textContent=\'已复制\'">复制</span>');
+  d.__t = text;
+  return d;
+}
+function sys(t){ add('sys', esc(t)); }
+
+function api(method, path, body){
+  return fetch(API + path, {method: method,
+      headers: {'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + tok},
+      body: body ? JSON.stringify(body) : undefined})
+    .then(function(r){ return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+        return j; }); });
+}
+
+function tick(){
+  var st = [];
+  st.push(busy ? '<span class="spin">⠋</span> ' + esc(busyPhase) + ' · ' +
+               Math.round((Date.now()-busySince)/1000) + 's'
+             : '<span class="on">● online</span> ' + esc(user));
+  if (queue.length) st.push('⏳ ' + queue.length + ' queued');
+  st.push('⛁ ' + esc(project || 'default'));
+  h('#st').innerHTML = st.join(' · ');
+}
+setInterval(tick, 1000);
+
+var busyPhase = '';
+function setBusy(p){ busyPhase = p || 'Thinking…'; }
+
+function send(text){
+  busy = true; busySince = Date.now(); setBusy('Submitting…');
+  var run = add('run','…'), think = null, body = null;
+  api('POST','/v1/chat',{project: project || 'default', message: text, policy: ''})
+   .then(function(r){
+     jobId = r.job_id;
+     if (!jobId) throw new Error(r.detail || 'no job_id');
+     poll();
+   })
+   .catch(function(e){ finish(); sys('Submit failed: ' + e.message); drain(); });
+  function poll(){
+    api('GET','/v1/jobs/' + jobId)
+     .then(function(j){
+       if (j.thinking){
+         if (!think) think = add('think','');
+         think.innerHTML = esc(j.thinking.slice(-1500));
+         think.onclick = function(){ think.classList.toggle('open'); };
+       }
+       if (j.partial){
+         if (!body) body = addAgent('');
+         body.innerHTML = md(j.partial) + '<span style="color:var(--amber)"> ▌</span>';
+         h('#chat').scrollTop = h('#chat').scrollHeight;
+       }
+       setBusy(j.activity || ('Working (' + j.status + ')…'));
+       if (j.status === 'done'){
+         var final = j.reply || '(empty reply)';
+         if (body){ body.innerHTML = md(final); body.__t = final; }
+         else addAgent(final);
+         if (think) think.classList.add('open');
+         run.remove(); finish(); drain();
+       } else if (j.status === 'error'){
+         run.remove(); if (body) body.remove();
+         sys('Cloud error: ' + (j.error || '?')); finish(); drain();
+       } else {
+         pollTimer = setTimeout(poll, 1000);
+       }
+     })
+     .catch(function(e){ run.remove(); sys('Poll failed: ' + e.message);
+                         finish(); drain(); });
+   }
+}
+function finish(){ busy = false; jobId = null; clearTimeout(pollTimer); }
+function drain(){
+  if (busy || !queue.length) return;
+  var t = queue.shift();
+  add('msg-u', esc(t));
+  send(t);
+}
+
+h('#inp').addEventListener('keydown', function(e){
+  if (e.key === 'Enter' && !e.shiftKey){
+    e.preventDefault(); h('#send').click();
+  }
+});
+h('#send').onclick = function(){
+  var t = h('#inp').value.trim(); h('#inp').value = '';
+  if (!t) return;
+  if (busy){ queue.push(t); add('q', esc(t)); return; }
+  add('msg-u', esc(t));
+  send(t);
+};
+h('#escbtn').onclick = function(){
+  if (jobId) api('POST','/v1/jobs/' + jobId + '/cancel', {})
+    .then(function(){ sys('⏹ interrupting…'); })
+    .catch(function(e){ sys('Interrupt failed: ' + e.message); });
+};
+
+function loadProjects(pick){
+  return api('GET','/v1/conversations').then(function(d){
+    var sel = h('#proj');
+    sel.innerHTML = '<option value="">default</option>';
+    (d.detail || []).forEach(function(it){
+      var o = document.createElement('option');
+      o.value = it.name; o.textContent = it.name;
+      sel.appendChild(o);
+    });
+    if (pick){ project = pick; }
+    sel.value = project || 'default';
+    if (project) sessionStorage.setItem('mda_proj', project);
+  });
+}
+h('#proj').onchange = function(){
+  project = this.value;
+  sessionStorage.setItem('mda_proj', project);
+  h('#feed').innerHTML = '';
+  replay(project);
+};
+h('#newproj').onclick = function(){
+  var n = prompt('新项目名(上下文独立,如 water-sim):');
+  if (!n) return;
+  n = n.trim().replace(/[^\w一-鿿-]+/g, '-');
+  if (!n) return;
+  project = n;
+  h('#feed').innerHTML = '';
+  loadProjects(n).then(function(){
+    sys('新项目 "' + n + '" 已建,直接开聊(云端上下文独立)');
+  });
+};
+function replay(p){
+  api('GET','/v1/conversations/' + encodeURIComponent(p) + '?turns=50')
+   .then(function(d){
+     var turns = d.turns || [];
+     if (!turns.length){ sys('项目 "' + (p||'default') + '" 还没有历史,直接开聊'); return; }
+     sys('—— 回放 ' + turns.length + ' 轮云端历史 ——');
+     turns.forEach(function(t){
+       if (t.role === 'user') add('msg-u', esc(t.text));
+       else addAgent(t.text);
+     });
+   })
+   .catch(function(e){ sys('History replay failed: ' + e.message); });
+}
+h('#logout').onclick = function(){
+  sessionStorage.removeItem('mda_token');
+  sessionStorage.removeItem('mda_user');
+  location.reload();
+};
+
+function enterApp(){
+  h('#login').style.display = 'none';
+  h('#main').style.display = 'flex';
+  loadProjects().then(function(){ replay(project); });
+  h('#inp').focus();
+}
+h('#loginbtn').onclick = doLogin;
+h('#lp').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') doLogin();
+});
+function doLogin(){
+  h('#lerr').style.display = 'none';
+  fetch(API + '/v1/login', {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: h('#lu').value.trim(),
+                            password: h('#lp').value})})
+    .then(function(r){ return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status)); return j; }); })
+    .then(function(j){
+      tok = j.token; user = j.username || h('#lu').value.trim();
+      sessionStorage.setItem('mda_token', tok);
+      sessionStorage.setItem('mda_user', user);
+      enterApp();
+    })
+    .catch(function(e){
+      h('#lerr').textContent = '登录失败:' + e.message;
+      h('#lerr').style.display = 'block';
+    });
+}
+
+if (tok){
+  api('GET','/v1/usage')
+    .then(function(){ enterApp(); })
+    .catch(function(){ sessionStorage.removeItem('mda_token'); tok=''; });
+}
+</script>
+</body>
+</html>

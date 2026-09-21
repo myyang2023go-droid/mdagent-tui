@@ -1333,7 +1333,7 @@ class MdAgentApp(App):
     #btn-no { background: #3A2028; }
     """
     BINDINGS = [
-        Binding("ctrl+c", "copy_or_quit", "copy/quit", priority=True),
+        Binding("ctrl+c", "copy_or_quit", "copy", priority=True),
         Binding("ctrl+q", "quit_app", "quit", priority=True),
         Binding("ctrl+g", "toggle_side", "goals"),
         Binding("pageup", "chat_pageup", "page up", show=False),
@@ -1343,13 +1343,17 @@ class MdAgentApp(App):
     ]
 
     def action_copy_or_quit(self):
-        """有拖选 → 复制进剪贴板;没选 → 退出(沿用终端 Ctrl+C 直觉)。"""
+        """有拖选 → 复制进剪贴板;没选 → 只提示,绝不退出。
+        (曾按终端直觉让无选区 Ctrl+C 直接退,实测成了误杀闪退的脚枪;
+        退出走 Ctrl+Q 或 /quit。)"""
         sel = self.screen.get_selected_text()
         if sel:
             self.copy_to_clipboard(sel)
             self.screen.clear_selection()
         else:
-            self.action_quit_app()
+            self.notify("Ctrl+C copies a selection (none now); exit = Ctrl+Q or /quit",
+                        title="copy")
+            self.add_sys("Tip: /copy copies the last reply without any mouse")
 
     def __init__(self):
         super().__init__()
@@ -2290,6 +2294,17 @@ def main():
         MdAgentApp().run()
     except KeyboardInterrupt:
         pass
+    except Exception:
+        # 闪退可诊断:traceback 落盘(Textual 退出时会清屏,终端里看不到)
+        import traceback
+        log = os.path.join(os.path.expanduser("~"), ".mdagent_tui_crash.log")
+        try:
+            with open(log, "a", encoding="utf-8") as f:
+                f.write("==== %s ====\n" % time.strftime("%F %T"))
+                traceback.print_exc(file=f)
+        except Exception:
+            pass
+        raise
     print("Disconnected. Bye.")
 
 
